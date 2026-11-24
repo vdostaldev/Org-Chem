@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Názvosloví">
+<meta name="theme-color" content="#f5f3ed" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151517" media="(prefers-color-scheme: dark)">
+<title>Názvosloví – trénink</title>
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400;1,7..72,600&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: tichý pracovní sešit; pohyb jen tam, kde něco vzniká
+   IDEA: učebnicový nákres technickým perem na čtverečkovaném papíře, fixa a červená propiska učitele
+   PICTURE: kostra molekuly, která se nakreslí čára po čáře, je hlavní věc obrazovky
+   COLOUR and TYPE: papír, tuš, žlutá fixa; červená jen pro chyby; Literata (chemie, nadpisy) + Instrument Sans (ovládání)
+   LAYOUT: jeden sloupec, nahoře drobná lišta, uprostřed nákres, dole jediný panel s akcí */
+:root{color-scheme:light dark;
+--bg:light-dark(#f5f3ed,#151517);--paper:light-dark(#fbfaf6,#1d1d20);--grid:light-dark(rgba(52,84,160,.05),rgba(255,255,255,.035));
+--ink:light-dark(#1b1b1d,#ebe7de);--soft:light-dark(#55524c,#b3afa6);--mute:light-dark(#8a867d,#7d7a73);
+--hl:light-dark(#f3d34a,#d6b62c);--hlink:#1b1b1d;--ok:light-dark(#2b6b3c,#86d39f);--bad:light-dark(#c2302a,#ff7d70)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Instrument Sans',system-ui,sans-serif;overflow-x:clip;-webkit-tap-highlight-color:transparent}
+button,select{font:inherit;color:inherit}
+.app{max-width:620px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;padding:max(4px,env(safe-area-inset-top)) 16px 0}
+.top{display:flex;align-items:center;gap:16px}
+.brand{font-family:Literata,Georgia,serif;font-weight:600;font-size:16px;margin-right:auto}
+.txt{border:0;background:none;padding:8px 0;min-height:40px;font-size:14px;color:var(--ink);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px;cursor:pointer}
+.txt:disabled{color:var(--mute);cursor:default}
+.lvl{position:relative}
+.lvl select{appearance:none;-webkit-appearance:none;border:0;background:none;padding:8px 16px 8px 0;min-height:40px;font-size:14px;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px;cursor:pointer}
+.lvl::after{content:"";position:absolute;right:2px;top:50%;width:6px;height:6px;border-right:1.5px solid var(--ink);border-bottom:1.5px solid var(--ink);transform:translateY(-70%) rotate(45deg);pointer-events:none}
+.meta{display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;font-size:14px;color:var(--soft)}
+.meta i{font-family:Literata,Georgia,serif}
+.bar{height:2px;background:color-mix(in srgb,var(--ink) 10%,transparent);margin-top:2px;position:relative}
+.bar b{position:absolute;left:0;top:0;bottom:0;background:var(--ink);transition:width .5s cubic-bezier(.3,.7,.2,1)}
+.head{display:flex;align-items:baseline;gap:10px;margin:14px 0 2px}
+.head i{margin-left:auto;font-family:Literata,Georgia,serif;font-size:14px;color:var(--mute)}
+h1{font-family:Literata,Georgia,serif;font-weight:600;font-size:clamp(23px,6.4vw,30px);line-height:1.1;margin:0;letter-spacing:-.01em}
+.sub{margin:0;color:var(--soft);font-size:14px;line-height:1.4}
+.txt.inl{min-height:0;padding:0;font-size:14px;color:var(--soft)}
+.ruleRow{display:flex;gap:16px}
+.ruleText{font-family:Literata,Georgia,serif;font-style:italic;font-size:14px;margin:6px 0 0;max-width:52ch;display:none}
+.ruleText.open{display:block}
+.stage{position:relative;margin:12px -16px 0;padding:6px 0 4px;overflow-x:auto;overflow-y:hidden;
+background-color:var(--paper);background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:20px 20px;background-position:center;
+}
+.board{position:relative;margin:0 auto}
+.board svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.bond{stroke:var(--ink);stroke-width:1.5;stroke-linecap:round}
+.bond.onp{stroke:var(--hlink)}
+#hl{fill:none;stroke:var(--hl);stroke-linecap:round;stroke-linejoin:round}
+.atom{position:absolute;display:flex;align-items:baseline;border:0;padding:2px 3px;background:var(--paper);border-radius:5px;
+font-family:Literata,Georgia,serif;line-height:1;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;
+transform:translate(calc(-.34em - 3px),-50%)}
+.atom .c{display:inline-block;width:.68em;text-align:center}
+.atom.on{background:var(--hl);color:var(--hlink)}
+.atom:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.slot{display:inline-block;min-width:1.25em;height:1em;margin-left:2px;font-size:.92em;border-radius:3px;transition:background .2s,box-shadow .2s}
+.slot sub{font-size:.62em;vertical-align:-.25em;line-height:0}
+.slot.empty{background:color-mix(in srgb,var(--ink) 11%,transparent);transform:translateY(.12em)}
+.slot.sel{box-shadow:0 0 0 1.5px var(--ink);background:color-mix(in srgb,var(--ink) 4%,transparent)}
+.slot.sel:not(.empty){background:none}
+.slot.sel.empty{background:color-mix(in srgb,var(--ink) 11%,transparent)}
+.slot.none{min-width:0;width:0}
+.slot.none.sel{width:.7em}
+.slot.bad{color:var(--bad);box-shadow:0 0 0 1.5px var(--bad)}
+.slot.fixed{min-width:0}
+.num{position:absolute;font-family:Literata,Georgia,serif;font-style:italic;font-weight:600;font-size:13px;transform:translate(-50%,-50%);pointer-events:none}
+.num.bad{color:var(--bad)}
+.ring{position:absolute;border:1.5px solid var(--ink);border-radius:50%;translate:-50% -50%;pointer-events:none;animation:breathe 1.4s ease-in-out infinite alternate}
+@keyframes breathe{from{scale:.92;opacity:.55}to{scale:1.08;opacity:1}}
+.nameArea{margin-top:12px;display:none}
+.nameArea.show{display:block}
+.answer{min-height:42px;display:flex;flex-wrap:wrap;align-content:flex-end;gap:6px;padding-bottom:6px;border-bottom:1.5px solid var(--ink)}
+.answer:empty::before{content:"sem skládej název";font-family:Literata,Georgia,serif;font-style:italic;color:var(--mute);align-self:center}
+.bank{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 4px}
+.tile{font-family:Literata,Georgia,serif;font-size:17px;line-height:1;padding:7px 9px 8px;border:1px solid var(--ink);border-radius:5px;background:var(--paper);cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;white-space:nowrap;transition:background .15s,color .15s}
+.tile:active{background:var(--ink);color:var(--bg)}
+.tile.ghost{border:1px dashed color-mix(in srgb,var(--ink) 30%,transparent);background:none;color:transparent;pointer-events:none}
+.tile.ph{opacity:.2}
+.tile.badt{border-color:var(--bad);color:var(--bad)}
+.drag{position:fixed;left:0;top:0;z-index:50;pointer-events:none;box-shadow:0 12px 24px rgba(0,0,0,.16);will-change:transform}
+.score{margin-top:auto;padding-top:18px;font-size:13px;color:var(--mute)}
+footer{position:sticky;bottom:0;margin:auto -16px 0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:var(--bg)}
+.msg{font-family:Literata,Georgia,serif;font-size:15px;line-height:1.35;margin:0 0 8px;display:none}
+.msg.show{display:block}
+.msg b{font-weight:600;margin-right:4px}
+.msg.ok b{color:var(--ok)}.msg.bad b{color:var(--bad)}
+.msg.bad span{font-style:italic}
+.tray{display:none;margin:0 0 10px}
+.tray.show{display:block}
+.tray p{display:none}
+.tray .opts{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.tray button{height:44px;border:1px solid var(--ink);border-radius:8px;background:var(--paper);font-family:Literata,Georgia,serif;font-size:18px;cursor:pointer;transition:background .12s,color .12s}
+.tray button:active{background:var(--ink);color:var(--bg)}
+.tray sub{font-size:.62em}
+.tray .z{font-family:'Instrument Sans',sans-serif;font-size:13px}
+.acts{display:flex;align-items:center;gap:16px;min-height:44px}
+.acts .txt{flex:0 0 auto}
+.btn{margin-left:auto;flex:0 1 200px;min-height:44px;border-radius:10px;border:0;background:var(--ink);color:var(--bg);font-weight:600;font-size:16px;cursor:pointer;transition:transform .1s,opacity .2s}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.25;cursor:default}
+.btn.ok{background:var(--ok);color:#fff}
+.hide{display:none!important}
+@keyframes shake{0%,100%{translate:0}25%{translate:-5px}50%{translate:5px}75%{translate:-3px}}
+.shake{animation:shake .35s ease}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <span class="brand">Názvosloví</span>
+    <label class="lvl"><span class="hide">Obtížnost</span><select id="lvl" aria-label="Obtížnost"><option value="1">lehké</option><option value="2">střední</option><option value="3">těžké</option></select></label>
+    <button class="txt" id="newBtn">nový</button>
+  </div>
+  <div class="bar"><b id="bar" style="width:0"></b></div>
+  <div class="head"><h1 id="title">Doplň vodíky</h1><i id="stepNo">1/4</i></div>
+  <p class="sub"><span id="sub"></span> <button class="txt inl" id="ruleBtn" aria-expanded="false">pravidlo</button></p>
+  <p class="ruleText" id="ruleText"></p>
+  <div class="stage" id="stage">
+    <div class="board" id="board">
+      <svg id="svg" aria-hidden="true"><polyline id="hl" points=""/><g id="bondG"></g></svg>
+      <div id="atomL"></div><div id="numL"></div>
+    </div>
+  </div>
+  <div class="nameArea" id="nameArea">
+    <div class="answer" id="answer" aria-label="Tvůj název"></div>
+    <div class="bank" id="bank"></div>
+  </div>
+    <footer>
+    <p class="msg" id="msg" role="status" aria-live="polite"><b id="msgT"></b><span id="msgM"></span></p>
+    <div class="tray" id="tray"><p id="trayQ">Kolik vodíků patří k vybranému uhlíku?</p><div class="opts">
+      <button data-v="3">H<sub>3</sub></button><button data-v="2">H<sub>2</sub></button><button data-v="1">H</button><button data-v="0"><span class="z">žádný</span></button></div></div>
+    <div class="acts"><button class="txt" id="clr">smazat</button><button class="txt" id="help">nevím</button><button class="btn" id="pri">Zkontrolovat</button></div>
+  </footer>
+</div>
+<script>
+{
+const $=s=>document.querySelector(s);
+const STEMS=['','meth','eth','prop','but','pent','hex','hept','okt','non','dek'];
+const ALK=['','methyl','ethyl','propyl','butyl'];
+const MULT=['','','di','tri','tetra'];
+const store={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const ri=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const HTXT=['','H','H<sub>2</sub>','H<sub>3</sub>'];
+const RM=matchMedia('(prefers-reduced-motion: reduce)');
+const anim=(el,k,o)=>RM.matches||!el.animate?null:el.animate(k,o);
+
+/* ---------- chemie ---------- */
+function adjOf(m){const adj=m.atoms.map(()=>[]);for(const b of m.bonds){adj[b.a].push({to:b.b,o:b.o});adj[b.b].push({to:b.a,o:b.o})}return adj}
+const val=(adj,id)=>adj[id].reduce((s,e)=>s+e.o,0);
+const bo=(adj,a,b)=>{const e=adj[a].find(e=>e.to===b);return e?e.o:0};
+function pathBetween(adj,u,v){const prev=new Map([[u,-1]]);const q=[u];while(q.length){const x=q.shift();if(x===v)break;for(const e of adj[x])if(!prev.has(e.to)){prev.set(e.to,x);q.push(e.to)}}const P=[];let c=v;while(c!==-1){P.push(c);c=prev.get(c)}return P.reverse()}
+function evalPath(adj,P){
+  const inP=new Set(P),mb=[],dl=[],tl=[];
+  for(let i=0;i<P.length-1;i++){const o=bo(adj,P[i],P[i+1]);if(o>1){mb.push(i+1);(o===2?dl:tl).push(i+1)}}
+  const subs=[];let valid=true;
+  P.forEach((id,i)=>{for(const e of adj[id]){if(inP.has(e.to))continue;
+    let len=1,prev=id,cur=e.to;if(e.o!==1)valid=false;
+    for(;;){const nx=adj[cur].filter(f=>f.to!==prev);if(!nx.length)break;if(nx.length>1){valid=false;break}if(nx[0].o!==1)valid=false;prev=cur;cur=nx[0].to;len++}
+    if(len>4)valid=false;subs.push({loc:i+1,name:ALK[Math.min(len,4)]})}});
+  const sl=subs.map(s=>s.loc).sort((a,b)=>a-b);
+  const alpha=[...subs].sort((a,b)=>(a.name<b.name?-1:a.name>b.name?1:0)||a.loc-b.loc).map(s=>s.loc);
+  return {P,len:P.length,mb,dl,tl,subs,sl,alpha,valid};
+}
+const lex=(a,b)=>{for(let i=0;i<Math.min(a.length,b.length);i++)if(a[i]!==b[i])return a[i]-b[i];return a.length-b.length};
+function stageCmp(x,y){
+  const st=[()=>y.mb.length-x.mb.length,()=>y.len-x.len,()=>y.subs.length-x.subs.length,()=>lex(x.mb,y.mb),()=>lex(x.dl,y.dl),()=>lex(x.sl,y.sl),()=>lex(x.alpha,y.alpha)];
+  for(let i=0;i<st.length;i++){const d=st[i]();if(d)return [i,d]}return [-1,0];
+}
+function buildName(c){
+  const tokens=[],groups={};
+  c.subs.forEach(s=>(groups[s.name]=groups[s.name]||[]).push(s.loc));
+  Object.keys(groups).sort().forEach((nm,gi)=>{const locs=groups[nm].sort((a,b)=>a-b),ls=locs.join(',');
+    tokens.push({t:gi?'-'+ls+'-':ls+'-',k:'loc'});if(locs.length>1)tokens.push({t:MULT[locs.length],k:'mult'});tokens.push({t:nm,k:'alk'})});
+  const d=c.dl.length,t=c.tl.length,needA=d>=2||(d===0&&t>=2);
+  tokens.push({t:STEMS[c.len]+(needA?'a':''),k:'stem'});
+  if(d+t===0)tokens.push({t:'an',k:'end'});
+  else if(c.len<=3&&d+t===1)tokens.push({t:d?'en':'yn',k:'end'});
+  else{
+    if(d){tokens.push({t:'-'+c.dl.join(',')+'-',k:'loc'});if(d>1)tokens.push({t:MULT[d],k:'mult'});tokens.push({t:'en',k:'end'})}
+    if(t){tokens.push({t:'-'+c.tl.join(',')+'-',k:'loc'});if(t>1)tokens.push({t:MULT[t],k:'mult'});tokens.push({t:'yn',k:'end'})}
+  }
+  return {tokens,str:tokens.map(x=>x.t).join('')};
+}
+function bestDir(adj,P){const a=evalPath(adj,P),b=evalPath(adj,[...P].reverse());return stageCmp(a,b)[1]<=0?a:b}
+function solve(m){
+  const adj=adjOf(m);
+  const leaves=m.atoms.filter(a=>adj[a.id].length===1).map(a=>a.id);
+  const cands=[];
+  for(const u of leaves)for(const v of leaves)if(u!==v)cands.push(evalPath(adj,pathBetween(adj,u,v)));
+  cands.sort((x,y)=>stageCmp(x,y)[1]);
+  const best=cands[0];
+  if(!best||!best.valid)return null;
+  const nm=buildName(best);
+  return {best,adj,name:nm.str,tokens:nm.tokens};
+}
+function generate(level){
+  for(let t=0;t<1500;t++){
+    const atoms=[],bonds=[];
+    const add=(x,y)=>{atoms.push({id:atoms.length,x,y});return atoms.length-1};
+    const n=level===1?ri(4,6):level===2?ri(5,7):ri(5,8);
+    for(let i=0;i<n;i++)add(i,0);
+    const orders=Array(n-1).fill(1);
+    let plan=[];
+    if(level===2){const r=Math.random();plan=r<.15?[]:r<.75?[2]:[3]}
+    if(level===3){const r=Math.random();plan=r<.2?[pick([2,3])]:r<.72?[2,2]:pick([[2,3],[3,2]])}
+    const used=[];let ok=true;
+    for(const o of plan){let placed=false;for(let k=0;k<40&&!placed;k++){const i=ri(0,n-2);if(used.some(u=>Math.abs(u-i)<2))continue;used.push(i);orders[i]=o;placed=true}if(!placed)ok=false}
+    if(!ok)continue;
+    orders.forEach((o,i)=>bonds.push({a:i,b:i+1,o}));
+    const m={atoms,bonds};
+    const ns=level===1?ri(1,2):level===2?ri(1,2):ri(2,3);
+    const occ=new Set(atoms.map(a=>a.x+','+a.y));
+    let fail=false;
+    for(let s=0;s<ns&&!fail;s++){
+      let done=false;
+      for(let k=0;k<30&&!done;k++){
+        const p=ri(1,n-2);
+        const L=Math.random()<(level===3?.45:.6)?1:ri(2,level===1?2:3);
+        if(val(adjOf(m),p)+1>4)continue;
+        for(const sd of shuffle([1,-1])){
+          const cells=[];for(let j=1;j<=L;j++)cells.push([p,sd*j]);
+          if(cells.some(([x,y])=>occ.has(x+','+y)||occ.has((x-1)+','+y)||occ.has((x+1)+','+y)))continue;
+          let prev=p;
+          for(const [x,y] of cells){const id=add(x,y);bonds.push({a:prev,b:id,o:1});prev=id;occ.add(x+','+y)}
+          done=true;break;
+        }
+      }
+      if(!done)fail=true;
+    }
+    if(fail)continue;
+    const sol=solve(m);
+    if(!sol||sol.best.len<4)continue;
+    if(level===1&&sol.best.subs.length>2)continue;
+    return {m,sol};
+  }
+}
+
+
+
+/* ---------- stav ---------- */
+const S={level:+store.get('nz-level',1)||1,streak:+store.get('nz-streak',0)||0,solved:+store.get('nz-solved',0)||0,
+  step:0,ok:false,final:false,h:{},sel:null,bad:new Set(),path:[],dir:null,lock:false,tiles:[],answer:[],badTiles:new Set(),helped:false,drag:null};
+let M=null,SOL=null,ADJ=null,POS={},SC=60,FS=22,ATOM={},LINES=[],ORDER=[];
+const STEPS=[
+ {t:'Doplň vodíky',s:'Ťukni na uhlík a dole vyber vodíky.',r:'Uhlík má vždy čtyři vazby. Vodíků je tolik, kolik vazeb mu zbývá: 4 − vazby k ostatním uhlíkům. Dvojná vazba se počítá za dvě, trojná za tři.'},
+ {t:'Hlavní řetězec',s:'Táhni prstem od konce ke konci.',r:'Rozhoduje v tomto pořadí: co nejvíc násobných vazeb, co největší délka, co nejvíc větví. Řetězec může zahýbat a začíná i končí na koncovém uhlíku.'},
+ {t:'Očíslování',s:'Ťukni na konec, odkud se čísluje.',r:'Nejnižší čísla dostanou nejdřív násobné vazby, pak větve (porovnává se číslo po čísle, ne součet), při shodě větev dřív v abecedě. Mezi dvojnou a trojnou vazbou vyhrává dvojná.'},
+ {t:'Název',s:'Ťukej na kostičky, tažením přeskládáš.',r:'Lokanty a větve abecedně (di-, tri- se nepočítá), kmen, -a- jen před di-/tri- v koncovce, lokanty vazeb, koncovka. Například 3-ethyl-2-methylhexa-1,4-dien.'}
+];
+
+/* ---------- nákres ---------- */
+const stage=$('#stage'),board=$('#board'),bondG=$('#bondG'),atomL=$('#atomL'),numL=$('#numL'),hl=$('#hl');
+function layout(){
+  const xs=M.atoms.map(a=>a.x),ys=M.atoms.map(a=>a.y);
+  const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+  const cols=maxX-minX+1,rows=maxY-minY+1;
+  SC=Math.max(42,Math.min(66,(stage.clientWidth-24)/cols));
+  const SY=Math.max(40,SC*(S.step===3?.68:.76));
+  FS=Math.max(15,Math.min(21,SC*.33));
+  POS={};M.atoms.forEach(a=>POS[a.id]={x:(a.x-minX+.5)*SC,y:(a.y-minY+.5)*SY+14});
+  board.style.width=cols*SC+'px';board.style.height=rows*SY+20+'px';
+}
+function build(animate){
+  layout();
+  bondG.textContent='';atomL.textContent='';ATOM={};LINES=[];
+  const NS='http://www.w3.org/2000/svg';
+  M.bonds.forEach(b=>{const p=POS[b.a],q=POS[b.b],dx=q.x-p.x,dy=q.y-p.y,L=Math.hypot(dx,dy),nx=-dy/L,ny=dx/L;
+    const ls=(b.o===1?[0]:b.o===2?[-3,3]:[-4.6,0,4.6]).map(o=>{const l=document.createElementNS(NS,'line');l.setAttribute('class','bond');
+      l.setAttribute('x1',p.x+nx*o);l.setAttribute('y1',p.y+ny*o);l.setAttribute('x2',q.x+nx*o);l.setAttribute('y2',q.y+ny*o);bondG.appendChild(l);return l});
+    LINES.push({b,ls,len:L})});
+  M.atoms.forEach(a=>{const e=document.createElement('button');e.className='atom';e.dataset.id=a.id;e.setAttribute('aria-label','uhlík');
+    e.style.left=POS[a.id].x+'px';e.style.top=POS[a.id].y+'px';e.style.fontSize=FS+'px';
+    e.innerHTML='<span class="c">C</span><span class="slot"></span>';atomL.appendChild(e);ATOM[a.id]=e});
+  M.atoms.forEach(a=>paintSlot(a.id));
+  paintHL();paintNums(false);
+  if(animate)drawIn();
+}
+function drawIn(){
+  if(RM.matches||!document.body.animate)return;
+  const start=SOL.best.P[0],dep={[start]:0},q=[start],edges=[];
+  while(q.length){const x=q.shift();for(const e of ADJ[x])if(dep[e.to]==null){dep[e.to]=dep[x]+1;q.push(e.to);edges.push([x,e.to])}}
+  const maxD=Math.max(1,...Object.values(dep)),step=Math.min(300,1300/maxD),dur=Math.max(180,step*1.05);
+  edges.forEach(([x,y])=>{const li=LINES.find(L=>(L.b.a===x&&L.b.b===y)||(L.b.b===x&&L.b.a===y)),d=dep[x]*step+80;
+    li.ls.forEach(l=>{l.style.strokeDasharray=li.len;l.animate([{strokeDashoffset:li.len},{strokeDashoffset:0}],{duration:dur,delay:d,easing:'cubic-bezier(.55,0,.3,1)',fill:'backwards'})})});
+  M.atoms.forEach(a=>{const e=ATOM[a.id],d=dep[a.id]?dep[a.id]*step+80+dur*.55:0;
+    e.animate([{opacity:0},{opacity:1}],{duration:200,delay:d,easing:'ease-out',fill:'backwards'});
+    e.querySelector('.slot').animate([{opacity:0},{opacity:1}],{duration:240,delay:d+200,fill:'backwards'})});
+}
+function paintSlot(id,fresh){
+  const s=ATOM[id].querySelector('.slot'),h=S.h[id];
+  if(S.step===0&&!S.ok){
+    s.className='slot'+(h==null?' empty':'')+(h===0?' none':'')+(S.sel===id?' sel':'')+(S.bad.has(id)?' bad':'');
+    s.innerHTML=h==null?'':HTXT[h];
+  }else{s.className='slot fixed';s.innerHTML=h?HTXT[h]:''}
+  if(fresh)anim(s,[{opacity:0,transform:'translateY(5px)'},{opacity:1,transform:'none'}],{duration:200,easing:'ease-out'});
+}
+function paintHL(){
+  const P=S.path,on=new Set(P);
+  hl.setAttribute('points',P.length>1?P.map(id=>POS[id].x+','+POS[id].y).join(' '):'');
+  hl.setAttribute('stroke-width',(FS*1.22).toFixed(1));
+  for(const id in ATOM)ATOM[id].classList.toggle('on',on.has(+id)&&P.length>1);
+  const pairs=new Set();for(let i=0;i<P.length-1;i++){pairs.add(P[i]+'-'+P[i+1]);pairs.add(P[i+1]+'-'+P[i])}
+  LINES.forEach(L=>{const o=pairs.has(L.b.a+'-'+L.b.b);L.ls.forEach(l=>l.classList.toggle('onp',o))});
+}
+function numEl(id,n,bad){const p=POS[id];return `<span class="num${bad?' bad':''}" style="left:${p.x-SC*.3}px;top:${p.y-FS*1.08}px">${n}</span>`}
+function paintNums(animate,dir,bad){
+  dir=dir||S.dir;
+  if(S.step>=2&&dir){
+    numL.innerHTML=dir.map((id,i)=>numEl(id,i+1,bad)).join('');
+    if(animate)[...numL.children].forEach((e,i)=>anim(e,[{opacity:0,transform:'translate(-50%,-10%)'},{opacity:1,transform:'translate(-50%,-50%)'}],{duration:240,delay:i*75,easing:'cubic-bezier(.3,.8,.3,1)',fill:'backwards'}));
+  }else if(S.step===2&&!S.ok&&!S.lock&&S.path.length){
+    numL.innerHTML=[S.path[0],S.path[S.path.length-1]].map(id=>{const p=POS[id];return `<span class="ring" style="left:${p.x}px;top:${p.y}px;width:${FS*2.2}px;height:${FS*2.2}px"></span>`}).join('');
+  }else numL.innerHTML='';
+}
+
+/* ---------- hlavička a panel ---------- */
+function paintHead(){
+  const st=Math.min(S.step,3);
+  $('#title').textContent=S.final?'Hotovo':STEPS[st].t;
+  $('#sub').textContent=S.final?(S.streak>1?`Série ${S.streak} v řadě.`:'Celý postup máš za sebou.'):STEPS[st].s;
+  $('#ruleText').textContent=STEPS[st].r;
+  $('#stepNo').textContent=S.final?'':`${st+1}/4`;
+  $('#bar').style.width=((S.step+(S.ok?1:0))/4*100)+'%';
+  $('#lvl').value=S.level;
+  $('#nameArea').classList.toggle('show',S.step===3);
+  paintFoot();
+}
+function paintFoot(){
+  const pri=$('#pri'),tray=$('#tray'),clr=$('#clr'),help=$('#help');
+  const trayOn=S.step===0&&!S.ok&&S.sel!=null;
+  tray.classList.toggle('show',trayOn);
+  pri.classList.toggle('ok',S.ok);
+  pri.classList.remove('hide');
+  if(S.ok){pri.textContent=S.final?'Další příklad':'Pokračovat';pri.disabled=false}
+  else{pri.textContent='Zkontrolovat';
+    if(S.step===0){pri.disabled=M.atoms.some(a=>S.h[a.id]==null);if(trayOn&&pri.disabled)pri.classList.add('hide')}
+    if(S.step===1)pri.disabled=S.path.length<2;
+    if(S.step===2)pri.classList.add('hide');
+    if(S.step===3)pri.disabled=!S.answer.length}
+  clr.classList.toggle('hide',S.ok||!((S.step===1&&S.path.length)||(S.step===3&&S.answer.length)));
+  clr.textContent=S.step===3?'vrátit vše':'smazat';
+  help.classList.toggle('hide',S.ok||S.lock);
+}
+function say(type,t,m){const e=$('#msg');e.className='msg show '+type;$('#msgT').textContent=t;$('#msgM').textContent=m||'';anim(e,[{opacity:0,transform:'translateY(6px)'},{opacity:1,transform:'none'}],{duration:220,easing:'ease-out'})}
+function hush(){$('#msg').className='msg'}
+
+/* ---------- průběh ---------- */
+function newProblem(){
+  const g=generate(S.level)||generate(1);M=g.m;SOL=g.sol;ADJ=SOL.adj;
+  const order=[...M.atoms].sort((a,b)=>a.y-b.y||a.x-b.x).map(a=>a.id);ORDER=order;
+  Object.assign(S,{step:0,ok:false,final:false,h:{},sel:order[0],bad:new Set(),path:[],dir:null,lock:false,tiles:[],answer:[],badTiles:new Set(),helped:false});
+  hush();paintHead();build(true);
+}
+function solved(msg,sub){S.ok=true;say('ok',msg,sub);paintHead()}
+function next(){
+  if(S.final)return newProblem();
+  S.step++;S.ok=false;hush();
+  if(S.step===3)makeTiles();
+  build(false);paintHead();
+  if(S.step===3)renderTiles(false);
+}
+
+/* krok 0 */
+function chooseAtom(id){if(S.sel===id)return;const old=S.sel;S.sel=id;if(old!=null)paintSlot(old);paintSlot(id);paintFoot()}
+function setH(v){
+  const id=S.sel;if(id==null)return;
+  S.h[id]=v;S.bad.delete(id);hush();
+  const i=ORDER.indexOf(id);let nx=null;
+  for(let k=1;k<=ORDER.length;k++){const c=ORDER[(i+k)%ORDER.length];if(S.h[c]==null){nx=c;break}}
+  S.sel=nx;paintSlot(id,true);if(nx!=null)paintSlot(nx);paintFoot();
+}
+function checkH(){
+  const wrong=M.atoms.filter(a=>S.h[a.id]!==4-val(ADJ,a.id)).map(a=>a.id);
+  if(!wrong.length){S.sel=null;S.ok=true;M.atoms.forEach(a=>paintSlot(a.id));solved('Sedí.','Každý uhlík má teď čtyři vazby.');return}
+  S.bad=new Set(wrong);S.sel=wrong[0];M.atoms.forEach(a=>paintSlot(a.id));
+  wrong.forEach(id=>{const s=ATOM[id].querySelector('.slot');s.classList.remove('shake');void s.offsetWidth;s.classList.add('shake')});
+  say('bad',wrong.length===1?'Jeden uhlík nesedí.':`Nesedí ${wrong.length} ${wrong.length<5?'uhlíky':'uhlíků'}.`,'Spočítej u nich čáry: 4 − vazby k uhlíkům = vodíky.');paintFoot();
+}
+
+/* krok 1 */
+const isAdj=(a,b)=>ADJ[a].some(e=>e.to===b);
+let chainDrag=false,raf=0,lastPt=null;
+function chainTap(id){
+  const p=S.path,last=p[p.length-1];
+  if(p.length&&id===last)return;
+  if(p.length>1&&id===p[p.length-2])p.pop();
+  else if(p.length>1&&p[0]===id)p.reverse();
+  else if(p.length&&!p.includes(id)&&isAdj(last,id))p.push(id);
+  else S.path=[id];
+  hush();paintHL();paintFoot();
+}
+function chainMove(){
+  raf=0;if(!lastPt)return;
+  const e=document.elementFromPoint(lastPt.x,lastPt.y),a=e&&e.closest('.atom');if(!a)return;
+  const id=+a.dataset.id,p=S.path,last=p[p.length-1];if(id===last)return;
+  if(p.length>1&&id===p[p.length-2]){p.pop();paintHL()}
+  else if(!p.includes(id)&&isAdj(last,id)){p.push(id);paintHL()}
+}
+function checkChain(){
+  const P=S.path,leaf=id=>ADJ[id].length===1,mine=bestDir(ADJ,P);
+  if(mine.valid&&buildName(mine).str===SOL.name){solved('Sedí.',`Hlavní řetězec má ${P.length} uhlíků.`);return}
+  let m;
+  if(!leaf(P[0])||!leaf(P[P.length-1]))m='Řetězec musí začínat i končit na koncovém uhlíku, ze kterého vede jen jedna vazba.';
+  else{const [i]=stageCmp(mine,SOL.best);m=i===0?'Hlavní řetězec musí obsahovat co nejvíc násobných vazeb.':i===1?'Existuje delší řetězec. Může zahýbat přes větvení.':i===2?'Stejně dlouhých je víc: vyber ten s víc větvemi.':'Existuje jiný stejně dlouhý řetězec, u kterého vyjdou nižší čísla.'}
+  for(const id of P){const e=ATOM[id];e.classList.remove('shake');void e.offsetWidth;e.classList.add('shake')}
+  say('bad','Ještě ne.',m);
+}
+
+/* krok 2 */
+let numTok=0;
+function numberFrom(id,byHelp){
+  if(S.ok||S.lock)return;
+  const P=S.path,a=P[0],z=P[P.length-1];
+  if(id!==a&&id!==z){say('bad','','Ťukni na jeden z konců řetězce, jsou v kroužku.');return}
+  const dir=id===a?[...P]:[...P].reverse(),mine=evalPath(ADJ,dir),other=evalPath(ADJ,[...dir].reverse());
+  const [i,d]=stageCmp(mine,other);
+  const tok=++numTok;S.lock=true;hush();paintFoot();
+  paintNums(true,dir,false);
+  const wait=dir.length*75+260;
+  if(d<=0){S.dir=dir;setTimeout(()=>{if(tok!==numTok)return;S.lock=false;if(byHelp)S.helped=true;solved('Sedí.',numMsg(mine))},wait);return}
+  setTimeout(()=>{
+    if(tok!==numTok)return;
+    paintNums(false,dir,true);
+    [...numL.children].forEach(e=>e.classList.add('shake'));
+    say('bad','Z druhé strany.',i===3?'Násobné vazby musí dostat co nejnižší čísla.':i===4?'Vazby vycházejí stejně, nižší číslo pak dostane dvojná vazba.':i===5?'Větve musí dostat co nejnižší čísla. Porovnávej číslo po čísle, ne součet.':'Z obou stran vychází stejně, rozhoduje abeceda: nižší číslo dostane větev dřív v abecedě.');
+    setTimeout(()=>{if(tok!==numTok)return;const kids=[...numL.children];let n=kids.length;if(!n||RM.matches){S.lock=false;paintNums(false);paintFoot();return}
+      kids.forEach(e=>{const an=e.animate([{opacity:1},{opacity:0}],{duration:250,fill:'forwards'});an.onfinish=()=>{if(--n===0&&tok===numTok){S.lock=false;paintNums(false);paintFoot()}}})},900);
+  },wait);
+  setTimeout(()=>{if(tok===numTok&&S.lock&&!S.ok&&!S.dir){S.lock=false;paintNums(false);paintFoot()}},wait+2500);
+}
+function numMsg(c){const p=[];if(c.mb.length)p.push('násobné vazby '+c.mb.join(', '));if(c.subs.length)p.push('větve '+c.sl.join(', '));return p.length?p.join(', ').replace(/^./,x=>x.toUpperCase())+'.':''}
+
+/* krok 3 */
+function makeTiles(){
+  const correct=SOL.tokens.map(x=>({...x}));
+  const rev=buildName(evalPath(ADJ,[...S.dir].reverse())).tokens.filter(x=>x.k==='loc').map(x=>({t:x.t,k:'loc'}));
+  const L=SOL.best.len,st=SOL.tokens.find(x=>x.k==='stem').t;
+  const pool=[...rev,{t:st.endsWith('a')?st.slice(0,-1):st+'a',k:'stema'}];
+  if(STEMS[L+1])pool.push({t:STEMS[L+1],k:'stem'});if(L>2)pool.push({t:STEMS[L-1],k:'stem'});
+  const ends=SOL.tokens.filter(x=>x.k==='end').map(x=>x.t);
+  ['an','en','yn'].filter(e=>!ends.includes(e)).forEach(e=>pool.push({t:e,k:'end'}));
+  pool.push({t:SOL.tokens.some(x=>x.t==='di')?'tri':'di',k:'mult'});
+  const alks=SOL.tokens.filter(x=>x.k==='alk').map(x=>x.t),other=ALK.slice(1,4).filter(a=>!alks.includes(a));
+  if(other.length)pool.push({t:pick(other),k:'alk'});
+  const seen=new Set(correct.map(x=>x.t)),dec=[];
+  for(const p of shuffle(pool)){if(seen.has(p.t))continue;seen.add(p.t);dec.push({...p,decoy:true});if(dec.length>=(S.level===1?3:4))break}
+  S.tiles=shuffle([...correct,...dec]).map((x,i)=>({...x,id:i}));S.answer=[];S.badTiles=new Set();
+}
+const bankEl=$('#bank'),ansEl=$('#answer');
+const tileHTML=(t,c)=>`<button class="tile${c}" data-t="${t.id}">${esc(t.t)}</button>`;
+function renderTiles(flip=true){
+  const before={};
+  if(flip)document.querySelectorAll('#nameArea .tile[data-t]').forEach(e=>before[e.dataset.t]=e.getBoundingClientRect());
+  const inA=new Set(S.answer),dg=S.drag&&S.drag.id;
+  ansEl.innerHTML=S.answer.map(id=>tileHTML(S.tiles[id],(dg===id?' ph':'')+(S.badTiles.has(id)?' badt':''))).join('');
+  bankEl.innerHTML=S.tiles.map(t=>inA.has(t.id)?`<span class="tile ghost">${esc(t.t)}</span>`:tileHTML(t,dg===t.id?' ph':'')).join('');
+  if(flip&&!RM.matches)document.querySelectorAll('#nameArea .tile[data-t]').forEach(e=>{const b=before[e.dataset.t];if(!b)return;const a=e.getBoundingClientRect(),dx=b.left-a.left,dy=b.top-a.top;
+    if(Math.abs(dx)+Math.abs(dy)>1)e.animate([{transform:`translate(${dx}px,${dy}px)`},{transform:'none'}],{duration:240,easing:'cubic-bezier(.25,.8,.25,1)'})});
+  paintFoot();
+}
+function toggleTile(id){if(S.ok)return;const i=S.answer.indexOf(id);if(i>=0)S.answer.splice(i,1);else S.answer.push(id);S.badTiles.clear();hush();renderTiles()}
+function tileDown(e){
+  const el=e.target.closest('.tile[data-t]');if(!el||S.step!==3||S.ok)return;
+  e.preventDefault();
+  const id=+el.dataset.t,sx=e.clientX,sy=e.clientY;let ghost=null,ox=0,oy=0,pt=null,fr=0;
+  const frame=()=>{fr=0;if(!pt||!ghost)return;
+    ghost.style.transform=`translate(${pt.x-ox}px,${pt.y-oy}px) rotate(-2deg)`;
+    const ar=ansEl.getBoundingClientRect();
+    if(pt.y>ar.top-30&&pt.y<ar.bottom+16){
+      const others=S.answer.filter(x=>x!==id),els=[...ansEl.querySelectorAll('.tile')].filter(t=>+t.dataset.t!==id);let idx=others.length;
+      for(let k=0;k<els.length;k++){const r=els[k].getBoundingClientRect();if(pt.y<r.top-4||(pt.y<=r.bottom+4&&pt.x<r.left+r.width/2)){idx=k;break}}
+      others.splice(idx,0,id);if(others.join()!==S.answer.join()){S.answer=others;renderTiles()}
+    }else if(S.answer.includes(id)&&pt.y>ar.bottom+16){S.answer=S.answer.filter(x=>x!==id);renderTiles()}
+  };
+  const move=ev=>{
+    if(!ghost){if(Math.hypot(ev.clientX-sx,ev.clientY-sy)<7)return;
+      const r=el.getBoundingClientRect();ox=sx-r.left;oy=sy-r.top;
+      ghost=el.cloneNode(true);ghost.classList.add('drag');ghost.style.width=r.width+'px';document.body.appendChild(ghost);
+      S.drag={id};S.badTiles.clear();hush();renderTiles(false)}
+    pt={x:ev.clientX,y:ev.clientY};if(!fr)fr=requestAnimationFrame(frame);
+  };
+  const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);
+    if(fr)cancelAnimationFrame(fr);
+    if(ghost){ghost.remove();S.drag=null;renderTiles(false)}else toggleTile(id)};
+  window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);
+}
+function finish(){
+  if(!S.helped)S.streak++;else S.streak=0;
+  S.solved++;store.set('nz-streak',S.streak);store.set('nz-solved',S.solved);
+  S.final=true;S.ok=true;
+  [...ansEl.children].forEach((e,i)=>anim(e,[{transform:'none'},{transform:'translateY(-7px)'},{transform:'none'}],{duration:420,delay:i*45,easing:'ease-in-out'}));
+  say('ok',S.helped?'Tady je správný název:':'Správně.',SOL.name);paintHead();
+}
+function checkName(){
+  const used=S.answer.map(id=>S.tiles[id]),str=used.map(t=>t.t).join('');
+  if(str===SOL.name)return finish();
+  const dec=used.filter(t=>t.decoy);let m;
+  if(dec.length){S.badTiles=new Set(dec.map(t=>t.id));renderTiles(false);const L=SOL.best.len;
+    m={loc:'Některé číslo nesedí s tvým číslováním.',stem:`Kmen se řídí počtem uhlíků hlavního řetězce, tady ${L}.`,stema:'Pozor na -a-: ke kmeni se přidává jen před di-, tri- v koncovce (buta-1,3-dien).',end:'Koncovka podle vazeb: -an jen jednoduché, -en dvojná, -yn trojná.',mult:'Spočítej, kolikrát se větev nebo vazba opakuje: di = 2, tri = 3.',alk:'Spočítej uhlíky ve větvi: methyl 1, ethyl 2, propyl 3.'}[dec[0].k]}
+  else if(used.length<SOL.tokens.length)m='Ještě ti tam něco chybí.';
+  else{const ua=used.filter(t=>t.k==='alk').map(t=>t.t).join(),ca=SOL.tokens.filter(t=>t.k==='alk').map(t=>t.t).join();
+    m=ua!==ca?'Větve se řadí abecedně, di- a tri- se do abecedy nepočítají.':'Pořadí částí: lokanty a větve, kmen, lokanty vazeb, koncovka.'}
+  [...ansEl.children].forEach(e=>{e.classList.remove('shake');void e.offsetWidth;e.classList.add('shake')});
+  say('bad','Ještě ne.',m);
+}
+
+/* nevím */
+function help(){
+  S.helped=true;
+  if(S.step===0){M.atoms.forEach(a=>{S.h[a.id]=4-val(ADJ,a.id)});S.bad.clear();S.sel=null;S.ok=true;M.atoms.forEach(a=>paintSlot(a.id,true));solved('Takhle to vychází.','Vodíků je vždy 4 minus počet vazeb k uhlíkům.');return}
+  if(S.step===1){S.path=[...SOL.best.P];paintHL();solved('Tudy vede hlavní řetězec.',`Má ${S.path.length} uhlíků.`);return}
+  if(S.step===2){const d=bestDir(ADJ,S.path).P;numberFrom(d[0],true);return}
+  if(S.step===3){const used=new Set();S.answer=SOL.tokens.map(tk=>{const t=S.tiles.find(x=>!x.decoy&&x.t===tk.t&&!used.has(x.id));used.add(t.id);return t.id});S.badTiles.clear();renderTiles();setTimeout(finish,260)}
+}
+
+/* ---------- události ---------- */
+board.addEventListener('pointerdown',e=>{
+  const a=e.target.closest('.atom');if(!a)return;const id=+a.dataset.id;
+  if(S.step===1&&!S.ok){e.preventDefault();chainDrag=true;chainTap(id)}
+});
+window.addEventListener('pointermove',e=>{if(chainDrag){lastPt={x:e.clientX,y:e.clientY};if(!raf)raf=requestAnimationFrame(chainMove)}},{passive:true});
+const endDrag=()=>{if(chainDrag){chainDrag=false;lastPt=null;paintFoot()}};
+window.addEventListener('pointerup',endDrag);window.addEventListener('pointercancel',endDrag);
+board.addEventListener('click',e=>{
+  const a=e.target.closest('.atom');if(!a)return;const id=+a.dataset.id;
+  if(S.step===0&&!S.ok)chooseAtom(id);
+  else if(S.step===1&&!S.ok&&e.detail===0)chainTap(id);
+  else if(S.step===2)numberFrom(id);
+});
+$('#tray').addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(b)setH(+b.dataset.v)});
+$('#nameArea').addEventListener('pointerdown',tileDown);
+$('#nameArea').addEventListener('click',e=>{if(e.detail===0){const t=e.target.closest('.tile[data-t]');t&&toggleTile(+t.dataset.t)}});
+$('#pri').addEventListener('click',()=>{if(S.ok)return next();[checkH,checkChain,null,checkName][S.step]?.()});
+$('#clr').addEventListener('click',()=>{hush();if(S.step===1){S.path=[];paintHL()}if(S.step===3){S.answer=[];S.badTiles.clear();renderTiles()}paintFoot()});
+$('#help').addEventListener('click',help);
+$('#ruleBtn').addEventListener('click',()=>{const o=$('#ruleText').classList.toggle('open');$('#ruleBtn').setAttribute('aria-expanded',o)});
+$('#lvl').addEventListener('change',e=>{S.level=+e.target.value;store.set('nz-level',S.level);newProblem()});
+$('#newBtn').addEventListener('click',()=>{if(S.step>0||Object.keys(S.h).length){S.streak=0;store.set('nz-streak',0)}newProblem()});
+let lastW=0;const ro=new ResizeObserver(()=>{if(M&&stage.clientWidth!==lastW){lastW=stage.clientWidth;build(false)}});ro.observe(stage);
+newProblem();lastW=stage.clientWidth;
+}
+</script>
+</body>
+</html>
