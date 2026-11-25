@@ -160,7 +160,7 @@ footer{position:sticky;bottom:0;margin:auto -16px 0;padding:10px 16px calc(10px 
 <script>
 {
 const $=s=>document.querySelector(s);
-const STEMS=['','meth','eth','prop','but','pent','hex','hept','okt','non','dek'];
+const STEMS=['','meth','eth','prop','but','pent','hex','hept','okt','non','dek','undek','dodek'];
 const ALK=['','methyl','ethyl','propyl','butyl'];
 const MULT=['','','di','tri','tetra'];
 const store={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
@@ -270,7 +270,7 @@ function generate(level){
     }
     if(fail)continue;
     const sol=solve(m);
-    if(!sol||sol.best.len<4)continue;
+    if(!sol||sol.best.len<4||sol.best.len>12)continue;
     if(level===1&&sol.best.subs.length>2)continue;
     if(X){const cnt={};sol.best.subs.forEach(s=>cnt[s.name]=(cnt[s.name]||0)+1);const vals=Object.values(cnt);
       if(sol.best.subs.length<3||Math.max(...vals)<2||Math.max(...vals)>4)continue;
@@ -570,7 +570,7 @@ function renderName(){
 }
 let PK=null;
 const PICK={
-  locs:{t:'Čísla',multi:true,cols:5,opts:[1,2,3,4,5,6,7,8,9,10].map(String)},
+  locs:{t:'Čísla',multi:true,cols:6,opts:[1,2,3,4,5,6,7,8,9,10,11,12].map(String)},
   mult:{t:'Násobná předpona',cols:4,opts:['','di','tri','tetra'],lab:{'':'žádná'}},
   alk:{t:'Větev',cols:2,opts:['methyl','ethyl','propyl','isopropyl','butyl']},
   stem:{t:'Kmen',cols:4,opts:STEMS.slice(1).flatMap(s=>[s,s+'a'])},
