@@ -324,8 +324,9 @@ function kindPool(level,o,ring){
 }
 function generate(level,o){
   o=Object.assign({},OPTDEF,o||{});
+  if(level===4&&!(o.ol||o.onal||o.acid))o=Object.assign(o,{ol:true,onal:true,acid:true,halo:true});
   const cats=[];
-  if(!o.onlyCyclo){cats.push('chain','chain');if(o.ol||o.onal||o.acid)cats.push('chain')}
+  if(!o.onlyCyclo){cats.push('chain','chain');if(o.ol||o.onal||o.acid)cats.push('chain');if(level===4)cats.push('chain','chain','chain')}
   if(o.cyclo)cats.push('ring');
   if(o.arom)cats.push('benz');
   if(!cats.length)cats.push(o.onlyCyclo?'ring':'chain');
@@ -338,17 +339,17 @@ function genChain(level,o){
   const X=level===4;
   const gcls=[...(o.ol?['ol','ol']:[]),...(o.onal?['on','al']:[]),...(o.acid?['acid']:[])];
   for(let t=0;t<3000;t++){
-    const G=gcls.length&&Math.random()<.65?pick(gcls):null;
+    const G=gcls.length&&Math.random()<(X?.88:.65)?pick(gcls):null;
     const atoms=[],bonds=[];
     const add=(x,y,tt)=>{atoms.push({id:atoms.length,x,y,...(tt?{t:tt}:{})});return atoms.length-1};
-    const n=G?(level===1?ri(3,5):level===2?ri(4,6):ri(4,7)):level===1?ri(4,6):level===2?ri(5,7):X?ri(6,7):ri(5,7);
+    const n=G?(level===1?ri(3,5):level===2?ri(4,6):X?ri(5,8):ri(4,7)):level===1?ri(4,6):level===2?ri(5,7):X?ri(6,7):ri(5,7);
     for(let i=0;i<n;i++)add(i,0);
     const orders=Array(n-1).fill(1);
     let plan=[];
-    if(level===2){const r=Math.random();plan=r<.15?[]:r<.75?[2]:[3]}
-    if(level===3){const r=Math.random();plan=r<.2?[pick([2,3])]:r<.72?[2,2]:pick([[2,3],[3,2]])}
-    if(X){const r=Math.random();plan=r<.4?[]:r<.75?[2]:r<.9?[2,2]:[3]}
-    if(G&&Math.random()<.5)plan=plan.slice(0,1);
+    if(level===2){const r=Math.random();plan=r<.15?[]:r<.57?[2]:[3]}
+    if(level===3){const r=Math.random();plan=r<.1?[2]:r<.22?[3]:r<.52?[2,2]:r<.62?[3,3]:pick([[2,3],[3,2]])}
+    if(X){const r=Math.random();plan=r<.2?[]:r<.45?[2]:r<.7?[3]:r<.82?[2,2]:pick([[2,3],[3,2]])}
+    if(G&&!X&&Math.random()<.5)plan=plan.slice(0,1);
     plan=plan.map(b=>b===2&&!o.dbl?(o.tri?3:0):b===3&&!o.tri?(o.dbl?2:0):b).filter(Boolean);
     if(!o.multi)plan=plan.slice(0,1);
     const used=[];let ok=true;
@@ -361,7 +362,8 @@ function genChain(level,o){
     const put=(p,cells)=>{for(const sd of shuffle([1,-1])){const cs=cells.map(([dx,dy,tt,bo])=>[p+dx,sd*dy,tt,bo]);if(cs.some(([x,y])=>!free(x,y)))continue;cs.forEach(([x,y,tt,b])=>{const id=add(x,y,tt);bonds.push({a:p,b:id,o:b||1});occ.add(x+','+y)});return true}return false};
     // hlavní skupiny
     if(G){
-      let need=G==='ol'&&level>=3&&Math.random()<.3?2:G==='on'&&level>=3&&n>=5&&Math.random()<.25?2:1,tries=0;
+      const rr=Math.random();
+      let need=G==='ol'?(X?(rr<.35?1:rr<.85?2:3):level>=3&&rr<.3?2:1):G==='on'&&n>=5?(X?(rr<.55?2:1):level>=3&&rr<.25?2:1):1,tries=0;
       while(need&&tries++<40){
         let p;
         if(G==='al'||G==='acid'){p=pick([0,n-1]);if(orders[p===0?0:n-2]!==1)continue;if(atoms.some((a,i)=>i>=n&&Math.round(a.x)===p))continue}
@@ -374,7 +376,7 @@ function genChain(level,o){
       }
       if(need)continue;
     }
-    const ns=G?(level===1?ri(0,1):level===2?ri(1,2):ri(1,3)):level===1?ri(1,2):level===2?ri(1,2):X?ri(3,5):ri(2,3);
+    const ns=G?(level===1?ri(0,1):level===2?ri(1,2):X?ri(2,4):ri(1,3)):level===1?ri(1,2):level===2?ri(1,2):X?ri(3,5):ri(2,3);
     const pool=kindPool(level,o,false);
     const kinds=[];
     if(X&&!G){const main=pick(pool.filter(k=>k!=='b'));for(let s=0;s<ns;s++)kinds.push(Math.random()<.6?main:pick(pool))}
@@ -406,6 +408,7 @@ function genChain(level,o){
     const sol=solve(m);
     if(!sol||sol.best.len<(G?3:4)||sol.best.len>12||!allowed(sol,o))continue;
     if(G&&sol.best.cls!==G)continue;
+    if(G&&X){const cnt={};sol.best.subs.forEach(s=>cnt[s.name]=(cnt[s.name]||0)+1);if(sol.best.subs.length<2||Math.max(0,...Object.values(cnt))>4)continue}
     if(level===1&&sol.best.subs.length>2)continue;
     if(X&&!G){const cnt={};sol.best.subs.forEach(s=>cnt[s.name]=(cnt[s.name]||0)+1);const vals=Object.values(cnt);
       if(sol.best.subs.length<3||Math.max(...vals)<2||Math.max(...vals)>4)continue;
@@ -489,13 +492,14 @@ const SETS=[
  {k:'cyclo',t:'Cykly',d:'cykloalkany a cykloalkeny, mezi ostatními příklady'},
  {k:'onlyCyclo',t:'Jen cykly',d:'každý příklad bude cyklus nebo benzen'},
  {k:'arom',t:'Areny',d:'benzen s větvemi, třeba 1,2-dimethylbenzen'},
- {h:'Deriváty'},
+ {h:'Deriváty (extrém je dává skoro vždy, i když jsou tady vypnuté)'},
  {k:'halo',t:'Halogenderiváty',d:'předpony fluor, chlor, brom, jod'},
  {k:'ol',t:'Alkoholy',d:'skupina -OH, koncovka -ol'},
  {k:'onal',t:'Aldehydy a ketony',d:'skupina =O, koncovky -al a -on'},
  {k:'acid',t:'Karboxylové kyseliny',d:'skupina -COOH, kyselina …ová'}
 ];
 let setSnap='';
+const EFF=()=>S.level===4&&!(OPT.ol||OPT.onal||OPT.acid)?Object.assign({},OPT,{ol:true,onal:true,acid:true,halo:true}):OPT;
 function renderSets(){
   $('#setList').innerHTML=SETS.map(x=>x.h?`<p class="sethead">${x.h}</p>`:`<div class="set"><span>${x.t}<small>${x.d}</small></span><button class="sw" role="switch" data-k="${x.k}" aria-checked="${!!OPT[x.k]}"${(x.k==='multi'&&!OPT.dbl&&!OPT.tri)||(x.k==='onlyCyclo'&&!OPT.cyclo&&!OPT.arom)?' disabled':''} aria-label="${x.t}"></button></div>`).join('');
 }
@@ -859,8 +863,8 @@ function fieldBtn(key,val,ph,dis){const bad=S.badF.has(key)?' bad':'',open=PK&&P
   return `<button class="f${val?'':' empty'}${bad}${open}" data-f="${key}"${dis?' disabled':''}>${val?esc(val):ph}</button>`}
 function renderName(){
   const n=S.nm;if(!n){nameEl.innerHTML='';return}
-  const hasG=OPT.ol||OPT.onal||OPT.acid,bz=n.stem==='benzen';
-  let h=`<div class="nrow"><small>${OPT.halo?'větve a předpony':'větve'}</small>`;
+  const hasG=EFF().ol||EFF().onal||EFF().acid,bz=n.stem==='benzen';
+  let h=`<div class="nrow"><small>${EFF().halo?'větve a předpony':'větve'}</small>`;
   n.subs.forEach((g,i)=>{h+=`<span class="grp">${fieldBtn('s'+i+'.locs',g.locs.join(','),'čísla')}<span class="dash">-</span>${fieldBtn('s'+i+'.mult',g.mult,'di/tri?')}${fieldBtn('s'+i+'.alk',g.alk,'větev')}</span>`});
   h+=`<button class="plus" data-add="s">+ větev</button></div><div class="nrow"><small>${S.ring?'základ':'hlavní řetězec'}</small>`;
   h+=`<span class="grp">${fieldBtn('stem',n.stem,'kmen')}</span>`;
@@ -875,10 +879,10 @@ let PK=null;
 const PICK={
   locs:{t:'Čísla',multi:true,cols:6,opts:[1,2,3,4,5,6,7,8,9,10,11,12].map(String)},
   mult:{t:'Násobná předpona',cols:4,opts:['','di','tri','tetra'],lab:{'':'žádná'}},
-  alk:{t:'Větev nebo předpona',cols:2,optsF:()=>['methyl','ethyl','propyl','isopropyl','butyl',...(OPT.halo?['fluor','chlor','brom','jod']:[])]},
-  stem:{t:'Kmen',cols:4,optsF:()=>[...STEMS.slice(1).flatMap(s=>[s,s+'a']),...(OPT.arom?['benzen']:[])]},
+  alk:{t:'Větev nebo předpona',cols:2,optsF:()=>['methyl','ethyl','propyl','isopropyl','butyl',...(EFF().halo?['fluor','chlor','brom','jod']:[])]},
+  stem:{t:'Kmen',cols:4,optsF:()=>[...STEMS.slice(1).flatMap(s=>[s,s+'a']),...(EFF().arom?['benzen']:[])]},
   end:{t:'Koncovka',cols:3,opts:['an','en','yn']},
-  suf:{t:'Přípona podle skupiny',cols:2,optsF:()=>[...(OPT.ol?['ol']:[]),...(OPT.onal?['on','al']:[]),...(OPT.acid?['ová']:[])],lab:{ol:'-ol (alkohol)',on:'-on (keton)',al:'-al (aldehyd)','ová':'kyselina …ová'}}
+  suf:{t:'Přípona podle skupiny',cols:2,optsF:()=>[...(EFF().ol?['ol']:[]),...(EFF().onal?['on','al']:[]),...(EFF().acid?['ová']:[])],lab:{ol:'-ol (alkohol)',on:'-on (keton)',al:'-al (aldehyd)','ová':'kyselina …ová'}}
 };
 function getF(key){const n=S.nm;if(key==='stem')return{obj:n,prop:'stem',kind:'stem'};if(key.startsWith('g.'))return{obj:n.grp,prop:key.slice(2),kind:key.slice(2)};const [g,prop]=key.split('.'),arr=g[0]==='s'?n.subs:n.bonds;return{obj:arr[+g.slice(1)],prop,kind:prop,arr,idx:+g.slice(1),grp:g[0]}}
 function openPick(key){
