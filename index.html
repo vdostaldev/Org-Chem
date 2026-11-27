@@ -32,7 +32,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Instrument Sa
 button,select{font:inherit;color:inherit}
 .app{max-width:620px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;padding:max(6px,env(safe-area-inset-top)) 16px 0}
 .top{display:flex;align-items:center;gap:16px}
-.brand{font-weight:600;font-size:16px;letter-spacing:-.01em;margin-right:auto}
+.brand{font-weight:600;font-size:16px;letter-spacing:-.01em;margin-right:auto;white-space:nowrap}
+.ver{font-weight:400;font-size:12px;letter-spacing:0;color:var(--mute);margin-left:4px}
+@media (max-width:340px){.top{gap:10px}}
 .txt{border:0;background:none;padding:8px 0;min-height:40px;font-size:14px;color:var(--ink);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px;cursor:pointer}
 .lvl{position:relative}
 .lvl select{appearance:none;-webkit-appearance:none;border:0;background:none;padding:8px 16px 8px 0;min-height:40px;font-size:14px;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px;cursor:pointer}
@@ -146,7 +148,7 @@ footer{position:sticky;bottom:0;margin:auto -16px 0;padding:10px 16px calc(10px 
 <body>
 <div class="app">
   <div class="top">
-    <span class="brand">Názvosloví</span>
+    <span class="brand">Názvosloví<span class="ver" title="verze aplikace">v3.2</span></span>
     <label class="lvl"><select id="lvl" aria-label="Obtížnost"><option value="1">lehké</option><option value="2">střední</option><option value="3">těžké</option><option value="4">extrém</option></select></label>
     <button class="txt" id="setBtn">nastavení</button>
     <button class="txt" id="newBtn">nový</button>
