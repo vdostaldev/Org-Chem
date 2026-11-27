@@ -124,6 +124,17 @@ footer{position:sticky;bottom:0;margin:auto -16px 0;padding:10px 16px calc(10px 
 .fbM b{font-family:Literata,Georgia,serif;font-size:20px}
 .fb .acts .txt{color:#fff}
 .fb .btn{background:#fff;color:#1b1b1d}
+.set{display:flex;align-items:center;gap:12px;min-height:48px;border-top:1px solid color-mix(in srgb,var(--ink) 10%,transparent)}
+.set:first-child{border-top:0}
+.set span{flex:1;font-size:15px;line-height:1.3}
+.set small{display:block;font-size:12px;color:var(--mute)}
+.sw{flex:none;width:46px;height:28px;border-radius:14px;border:1.5px solid var(--ink);background:none;position:relative;cursor:pointer;transition:background .15s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:var(--ink);transition:transform .18s ease,background .15s}
+.sw[aria-checked=true]{background:var(--ink)}
+.sw[aria-checked=true]::after{transform:translateX(18px);background:var(--bg)}
+.sw:disabled{opacity:.35}
+.sethead{font-size:12px;color:var(--mute);margin:12px 0 0}
+.opts button.tog{grid-column:1/-1;font-family:'Instrument Sans',sans-serif;font-size:14px}
 .hide{display:none!important}
 @keyframes shake{0%,100%{translate:0}25%{translate:-5px}50%{translate:5px}75%{translate:-3px}}
 .shake{animation:shake .35s ease}
@@ -135,6 +146,7 @@ footer{position:sticky;bottom:0;margin:auto -16px 0;padding:10px 16px calc(10px 
   <div class="top">
     <span class="brand">Názvosloví</span>
     <label class="lvl"><select id="lvl" aria-label="Obtížnost"><option value="1">lehké</option><option value="2">střední</option><option value="3">těžké</option><option value="4">extrém</option></select></label>
+    <button class="txt" id="setBtn">nastavení</button>
     <button class="txt" id="newBtn">nový</button>
   </div>
   <div class="bar"><b id="bar" style="width:0"></b></div>
@@ -156,6 +168,7 @@ footer{position:sticky;bottom:0;margin:auto -16px 0;padding:10px 16px calc(10px 
   </footer>
 </div>
 <div class="pick" id="pick" role="dialog" aria-modal="true" aria-labelledby="pickT"><div class="in"><h3 id="pickT"></h3><div class="opts" id="pickO"></div><div class="row"><button class="txt hide" id="pickDel">odebrat</button><button class="btn" id="pickOk">Hotovo</button></div></div></div>
+<div class="pick" id="setSheet" role="dialog" aria-modal="true" aria-labelledby="setT"><div class="in"><h3 id="setT">Nastavení</h3><div id="setList"></div><div class="row"><button class="txt" id="setReset">výchozí</button><button class="btn" id="setOk">Hotovo</button></div></div></div>
 <div class="fb" id="fb" role="status" aria-live="polite"><div class="in"><div class="fbT" id="fbT"></div><p class="fbM" id="fbM"></p><div class="acts"><button class="txt" id="fbHelp">nevím</button><button class="btn" id="fbBtn"></button></div></div></div>
 <script>
 {
@@ -177,10 +190,8 @@ function adjOf(m){const adj=m.atoms.map(()=>[]);for(const b of m.bonds){adj[b.a]
 const val=(adj,id)=>adj[id].reduce((s,e)=>s+e.o,0);
 const bo=(adj,a,b)=>{const e=adj[a].find(e=>e.to===b);return e?e.o:0};
 function pathBetween(adj,u,v){const prev=new Map([[u,-1]]);const q=[u];while(q.length){const x=q.shift();if(x===v)break;for(const e of adj[x])if(!prev.has(e.to)){prev.set(e.to,x);q.push(e.to)}}const P=[];let c=v;while(c!==-1){P.push(c);c=prev.get(c)}return P.reverse()}
-function evalPath(adj,P){
-  const inP=new Set(P),mb=[],dl=[],tl=[];
-  for(let i=0;i<P.length-1;i++){const o=bo(adj,P[i],P[i+1]);if(o>1){mb.push(i+1);(o===2?dl:tl).push(i+1)}}
-  const subs=[];let valid=true;
+function branchesOf(adj,P){
+  const inP=new Set(P),subs=[];let valid=true;
   P.forEach((id,i)=>{for(const e of adj[id]){if(inP.has(e.to))continue;
     if(e.o!==1)valid=false;
     const first=adj[e.to].filter(f=>f.to!==id);
@@ -190,8 +201,28 @@ function evalPath(adj,P){
     if(len>4)valid=false;subs.push({loc:i+1,name:ALK[Math.min(len,4)]})}});
   const sl=subs.map(s=>s.loc).sort((a,b)=>a-b);
   const alpha=[...subs].sort((a,b)=>(a.name<b.name?-1:a.name>b.name?1:0)||a.loc-b.loc).map(s=>s.loc);
-  return {P,len:P.length,mb,dl,tl,subs,sl,alpha,valid};
+  return {subs,sl,alpha,valid};
 }
+function evalPath(adj,P){
+  const mb=[],dl=[],tl=[];
+  for(let i=0;i<P.length-1;i++){const o=bo(adj,P[i],P[i+1]);if(o>1){mb.push(i+1);(o===2?dl:tl).push(i+1)}}
+  return {P,len:P.length,mb,dl,tl,...branchesOf(adj,P)};
+}
+function evalRing(adj,P){
+  const k=P.length,mb=[],dl=[],tl=[];
+  for(let i=0;i<k;i++){const o=bo(adj,P[i],P[(i+1)%k]);if(o>1){mb.push(i+1);(o===2?dl:tl).push(i+1)}}
+  return {P,len:k,ring:true,mb,dl,tl,...branchesOf(adj,P)};
+}
+function findRing(adj){
+  const n=adj.length,deg=adj.map(a=>a.length),alive=new Set([...Array(n).keys()]);
+  const q=[...alive].filter(i=>deg[i]<=1);
+  while(q.length){const x=q.pop();if(!alive.has(x))continue;alive.delete(x);for(const e of adj[x])if(alive.has(e.to)){deg[e.to]--;if(deg[e.to]===1)q.push(e.to)}}
+  if(alive.size<3)return null;
+  const start=[...alive][0],ring=[start];let prev=-1,cur=start;
+  for(let g=0;g<64;g++){const nx=adj[cur].filter(e=>alive.has(e.to)&&e.to!==prev);if(!nx.length)return null;const to=nx[0].to;if(to===start)break;ring.push(to);prev=cur;cur=to}
+  return ring.length===alive.size?ring:null;
+}
+function ringOrders(ring){const k=ring.length,out=[];for(let i=0;i<k;i++){out.push([...Array(k)].map((_,j)=>ring[(i+j)%k]));out.push([...Array(k)].map((_,j)=>ring[(i-j+k)%k]))}return out}
 const lex=(a,b)=>{for(let i=0;i<Math.min(a.length,b.length);i++)if(a[i]!==b[i])return a[i]-b[i];return a.length-b.length};
 function stageCmp(x,y){
   const st=[()=>y.mb.length-x.mb.length,()=>y.len-x.len,()=>y.subs.length-x.subs.length,()=>lex(x.mb,y.mb),()=>lex(x.dl,y.dl),()=>lex(x.sl,y.sl),()=>lex(x.alpha,y.alpha)];
@@ -203,6 +234,14 @@ function buildName(c){
   Object.keys(groups).sort().forEach((nm,gi)=>{const locs=groups[nm].sort((a,b)=>a-b),ls=locs.join(',');
     tokens.push({t:gi?'-'+ls+'-':ls+'-',k:'loc'});if(locs.length>1)tokens.push({t:MULT[locs.length],k:'mult'});tokens.push({t:nm,k:'alk'})});
   const d=c.dl.length,t=c.tl.length,needA=d>=2||(d===0&&t>=2);
+  if(c.ring){
+    if(c.subs.length===1&&d+t===0&&tokens[0]&&tokens[0].k==='loc')tokens.shift();
+    tokens.push({t:'cyklo'+STEMS[c.len]+(needA?'a':''),k:'stem'});
+    if(d+t===0)tokens.push({t:'an',k:'end'});
+    else if(d===1)tokens.push({t:'en',k:'end'});
+    else{tokens.push({t:'-'+c.dl.join(',')+'-',k:'loc'});tokens.push({t:MULT[d],k:'mult'});tokens.push({t:'en',k:'end'})}
+    return {tokens,str:tokens.map(x=>x.t).join('')};
+  }
   tokens.push({t:STEMS[c.len]+(needA?'a':''),k:'stem'});
   if(d+t===0)tokens.push({t:'an',k:'end'});
   else if(c.len<=3&&d+t===1)tokens.push({t:d?'en':'yn',k:'end'});
@@ -214,7 +253,13 @@ function buildName(c){
 }
 function bestDir(adj,P){const a=evalPath(adj,P),b=evalPath(adj,[...P].reverse());return stageCmp(a,b)[1]<=0?a:b}
 function solve(m){
-  const adj=adjOf(m);
+  const adj=adjOf(m),ring=findRing(adj);
+  if(ring){
+    const cands=ringOrders(ring).map(P=>evalRing(adj,P));
+    cands.sort((x,y)=>stageCmp(x,y)[1]);
+    const best=cands[0];if(!best.valid)return null;
+    const nm=buildName(best);return {best,adj,name:nm.str,tokens:nm.tokens,ring};
+  }
   const leaves=m.atoms.filter(a=>adj[a.id].length===1).map(a=>a.id);
   const cands=[];
   for(const u of leaves)for(const v of leaves)if(u!==v)cands.push(evalPath(adj,pathBetween(adj,u,v)));
@@ -224,7 +269,19 @@ function solve(m){
   const nm=buildName(best);
   return {best,adj,name:nm.str,tokens:nm.tokens};
 }
-function generate(level){
+const OPTDEF={hyd:true,dbl:true,tri:true,multi:true,longAlk:true,iso:true,cyclo:false,onlyCyclo:false};
+function allowed(sol,o){
+  const b=sol.best,names=new Set(b.subs.map(s=>s.name));
+  if(!o.longAlk&&[...names].some(n=>n!=='methyl'&&n!=='isopropyl'))return false;
+  if(!o.iso&&names.has('isopropyl'))return false;
+  if(!o.dbl&&b.dl.length)return false;
+  if(!o.tri&&b.tl.length)return false;
+  if(!o.multi&&b.dl.length+b.tl.length>1)return false;
+  return true;
+}
+function generate(level,o){
+  o=Object.assign({},OPTDEF,o||{});
+  if((o.cyclo||o.onlyCyclo)&&(o.onlyCyclo||Math.random()<.35)){const r=genRing(level,o);if(r)return r}
   const X=level===4;
   for(let t=0;t<3000;t++){
     const atoms=[],bonds=[];
@@ -236,15 +293,19 @@ function generate(level){
     if(level===2){const r=Math.random();plan=r<.15?[]:r<.75?[2]:[3]}
     if(level===3){const r=Math.random();plan=r<.2?[pick([2,3])]:r<.72?[2,2]:pick([[2,3],[3,2]])}
     if(X){const r=Math.random();plan=r<.4?[]:r<.75?[2]:r<.9?[2,2]:[3]}
+    plan=plan.map(b=>b===2&&!o.dbl?(o.tri?3:0):b===3&&!o.tri?(o.dbl?2:0):b).filter(Boolean);
+    if(!o.multi)plan=plan.slice(0,1);
     const used=[];let ok=true;
-    for(const o of plan){let placed=false;for(let k=0;k<40&&!placed;k++){const i=ri(0,n-2);if(used.some(u=>Math.abs(u-i)<2))continue;used.push(i);orders[i]=o;placed=true}if(!placed)ok=false}
+    for(const b of plan){let placed=false;for(let k=0;k<40&&!placed;k++){const i=ri(0,n-2);if(used.some(u=>Math.abs(u-i)<2))continue;used.push(i);orders[i]=b;placed=true}if(!placed)ok=false}
     if(!ok)continue;
-    orders.forEach((o,i)=>bonds.push({a:i,b:i+1,o}));
+    orders.forEach((b,i)=>bonds.push({a:i,b:i+1,o:b}));
     const m={atoms,bonds};
     const ns=level===1?ri(1,2):level===2?ri(1,2):X?ri(3,5):ri(2,3);
     const occ=new Set(atoms.map(a=>a.x+','+a.y));
+    const pool=['m','m',...(o.longAlk?['e','e','p','b']:[]),...(o.iso?['i']:[])];
     const kinds=[];
-    if(X){const main=pick(['m','m','e','e','i','p']);for(let s=0;s<ns;s++)kinds.push(Math.random()<.6?main:pick(['m','e','e','i','p','b']))}
+    if(X){const main=pick(pool.filter(k=>k!=='b'));for(let s=0;s<ns;s++)kinds.push(Math.random()<.6?main:pick(pool))}
+    else for(let s=0;s<ns;s++){const r=Math.random();kinds.push(o.iso&&level>1&&r<.15?'i':!o.longAlk||r<(level===3?.5:.65)?'m':pick(level===1?['e']:['e','e','p']))}
     const free=(x,y)=>!occ.has(x+','+y)&&!occ.has((x-1)+','+y)&&!occ.has((x+1)+','+y);
     let fail=false;
     for(let s=0;s<ns&&!fail;s++){
@@ -252,8 +313,8 @@ function generate(level){
       for(let k=0;k<40&&!done;k++){
         const p=ri(1,n-2);
         if(val(adjOf(m),p)+1>4)continue;
-        const kind=X?kinds[s]:null;
-        const L=X?{m:1,e:2,p:3,b:4,i:1}[kind]:(Math.random()<(level===3?.45:.6)?1:ri(2,level===1?2:3));
+        const kind=kinds[s];
+        const L={m:1,e:2,p:3,b:4,i:1}[kind];
         for(const sd of shuffle([1,-1])){
           const cells=[];for(let j=1;j<=L;j++)cells.push([p,sd*j]);
           const extra=kind==='i'?[[p-1,sd*2],[p+1,sd*2]]:[];
@@ -270,20 +331,90 @@ function generate(level){
     }
     if(fail)continue;
     const sol=solve(m);
-    if(!sol||sol.best.len<4||sol.best.len>12)continue;
+    if(!sol||sol.best.len<4||sol.best.len>12||!allowed(sol,o))continue;
     if(level===1&&sol.best.subs.length>2)continue;
     if(X){const cnt={};sol.best.subs.forEach(s=>cnt[s.name]=(cnt[s.name]||0)+1);const vals=Object.values(cnt);
       if(sol.best.subs.length<3||Math.max(...vals)<2||Math.max(...vals)>4)continue;
-      if(Object.keys(cnt).length===1&&cnt.methyl&&Math.random()<.7)continue}
+      if(Object.keys(cnt).length===1&&cnt.methyl&&o.longAlk&&Math.random()<.7)continue}
+    return {m,sol};
+  }
+}
+function genRing(level,o){
+  const X=level===4;
+  for(let t=0;t<2000;t++){
+    const k=level===1?pick([4,5,6,6]):pick([3,4,5,5,6,6,6,7]);
+    const R=1/(2*Math.sin(Math.PI/k)),a0=-Math.PI/2+(k%2?0:Math.PI/k);
+    const atoms=[],bonds=[];
+    const add=(x,y)=>{atoms.push({id:atoms.length,x,y});return atoms.length-1};
+    const ang=[];
+    for(let i=0;i<k;i++){const a=a0+2*Math.PI*i/k;ang.push(a);add(R*Math.cos(a),R*Math.sin(a))}
+    const orders=Array(k).fill(1);
+    if(o.dbl&&level>1&&k>=4&&Math.random()<.55){const i=ri(0,k-1);orders[i]=2;
+      if(o.multi&&k>=5&&Math.random()<.4){const j=(i+2+ri(0,k-4))%k;if(Math.abs(j-i)>=2&&Math.abs(j-i)<=k-2)orders[j]=2}}
+    orders.forEach((b,i)=>bonds.push({a:i,b:(i+1)%k,o:b}));
+    const m={atoms,bonds};
+    const ns=level===1?ri(1,2):level===2?ri(1,2):X?ri(2,4):ri(2,3);
+    const pool=level===1?['m','m',...(o.longAlk?['e']:[])]:['m','m',...(o.longAlk?['e','e','p']:[]),...(o.iso?['i']:[])];
+    const main=pick(pool);
+    const near=(x,y)=>atoms.some(a=>Math.hypot(a.x-x,a.y-y)<.8);
+    const cnt=Array(k).fill(0);let fail=false;
+    for(let s=0;s<ns&&!fail;s++){
+      const kind=X&&Math.random()<.6?main:pick(pool),L={m:1,e:2,p:3,i:1}[kind];
+      let done=false;
+      for(let tr=0;tr<30&&!done;tr++){
+        const p=ri(0,k-1);
+        if(val(adjOf(m),p)+1>4)continue;
+        const base=ang[p]+(cnt[p]?(Math.random()<.5?.75:-.75):0);
+        const ux=Math.cos(base),uy=Math.sin(base),px=atoms[p].x,py=atoms[p].y;
+        const pts=[];for(let j=1;j<=L;j++)pts.push([px+ux*j,py+uy*j]);
+        const ex=kind==='i'?[.9,-.9].map(r=>{const c=Math.cos(base+r),sn=Math.sin(base+r);return [pts[0][0]+c,pts[0][1]+sn]}):[];
+        if([...pts,...ex].some(([x,y])=>near(x,y)))continue;
+        let prev=p;for(const [x,y] of pts){const id=add(x,y);bonds.push({a:prev,b:id,o:1});prev=id}
+        for(const [x,y] of ex){const id=add(x,y);bonds.push({a:prev,b:id,o:1})}
+        cnt[p]++;done=true;
+      }
+      if(!done)fail=true;
+    }
+    if(fail)continue;
+    const sol=solve(m);
+    if(!sol||!sol.ring||!allowed(sol,o))continue;
     return {m,sol};
   }
 }
 
 
+/* ---------- nastavení ---------- */
+let OPT=Object.assign({},OPTDEF,store.get('nz-opt',{}));
+const SETS=[
+ {h:'Postup'},
+ {k:'hyd',t:'Doplňovat vodíky',d:'první krok, jinak jsou vodíky hotové'},
+ {h:'Vazby'},
+ {k:'dbl',t:'Dvojné vazby',d:'alkeny, -en'},
+ {k:'tri',t:'Trojné vazby',d:'alkyny, -yn'},
+ {k:'multi',t:'Víc násobných vazeb',d:'dieny, en-yny'},
+ {h:'Větve'},
+ {k:'longAlk',t:'Delší větve',d:'ethyl, propyl, butyl; vypnuto = jen methyl'},
+ {k:'iso',t:'Isopropyl',d:'větev připojená prostředním uhlíkem'},
+ {h:'Navíc'},
+ {k:'cyclo',t:'Cykly',d:'cykloalkany a cykloalkeny, mezi ostatními příklady'},
+ {k:'onlyCyclo',t:'Jen cykly',d:'každý příklad bude cyklický'}
+];
+let setSnap='';
+function renderSets(){
+  $('#setList').innerHTML=SETS.map(x=>x.h?`<p class="sethead">${x.h}</p>`:`<div class="set"><span>${x.t}<small>${x.d}</small></span><button class="sw" role="switch" data-k="${x.k}" aria-checked="${!!OPT[x.k]}"${(x.k==='multi'&&!OPT.dbl&&!OPT.tri)||(x.k==='onlyCyclo'&&!OPT.cyclo)?' disabled':''} aria-label="${x.t}"></button></div>`).join('');
+}
+function openSets(){setSnap=JSON.stringify(OPT);renderSets();const sh=$('#setSheet');sh.classList.add('show');anim(sh.querySelector('.in'),[{transform:'translateY(100%)'},{transform:'none'}],{duration:240,easing:'cubic-bezier(.3,.8,.3,1)'})}
+function closeSets(){$('#setSheet').classList.remove('show');store.set('nz-opt',OPT);if(JSON.stringify(OPT)!==setSnap)newProblem()}
+
 /* ---------- stav ---------- */
 const S={level:+store.get('nz-level',1)||1,streak:+store.get('nz-streak',0)||0,
   step:0,ok:false,final:false,h:{},sel:null,bad:new Set(),path:[],dir:null,lock:false,nm:null,badF:new Set(),helped:false};
 let M=null,SOL=null,ADJ=null,POS={},SC=60,FS=22,ATOM={},LINES=[],ORDER=[],MOLB=0;
+const RSTEPS={
+ 1:{t:'Základ',s:'Ťukni na cyklus.',r:'Když je v molekule cyklus, je základem názvu on. Všechno, co z něj trčí, jsou větve. Kmen dostane předponu cyklo-: cyklohexan, cyklopenten…'},
+ 2:{t:'Očíslování',s:'Ťukni na uhlík s číslem 1, pak na souseda s číslem 2.',r:'Číslo 1 dostane uhlík dvojné vazby, a pokud žádná není, uhlík s větví. Pak se pokračuje směrem, kterým vyjdou nižší čísla. U cykloalkenu je dvojná vazba vždy mezi 1 a 2, takže se její číslo nepíše. Jediná větev na cyklu se nečísluje.'},
+ 3:{t:'Název',s:'Ťukni na políčko a vyber, co do něj patří.',r:'Větve abecedně s čísly, pak cyklo + kmen + koncovka. Methylcyklohexan, 1,2-dimethylcyklopentan, 3-methylcyklohexen, cyklohexa-1,3-dien.'}};
+const stepTxt=st=>S.ring&&RSTEPS[st]?RSTEPS[st]:STEPS[st];
 const STEPS=[
  {t:'Doplň vodíky',s:'Ťukni na uhlík a v bublině vyber, jak má vypadat.',r:'Uhlík má vždy čtyři vazby. Vodíků je tolik, kolik vazeb mu zbývá: 4 − vazby k ostatním uhlíkům. Dvojná vazba se počítá za dvě, trojná za tři.'},
  {t:'Hlavní řetězec',s:'Táhni prstem od konce ke konci.',r:'Rozhoduje v tomto pořadí: co nejvíc násobných vazeb, co největší délka, co nejvíc větví. Řetězec může zahýbat a začíná i končí na koncovém uhlíku.'},
@@ -377,15 +508,22 @@ function chainShapes(P,pad,col){
     l-=pad;r+=pad;t-=pad;b+=pad;const rx=Math.min(FS*.5,(b-t)/2,(r-l)/2);
     return `<rect x="${l}" y="${t}" width="${r-l}" height="${b-t}" rx="${rx}" style="fill:${col}"/>`}).join('');
 }
+function ringShapes(P,pad,col){
+  const w=FS*1.25+pad*2;
+  return `<polygon points="${P.map(id=>POS[id].x+','+POS[id].y).join(' ')}" style="fill:none;stroke:${col};stroke-width:${w};stroke-linejoin:round"/>`+P.map(id=>{const x=boxOf(id);return `<rect x="${x.l-pad}" y="${x.t-pad}" width="${x.r-x.l+pad*2}" height="${x.b-x.t+pad*2}" rx="${Math.min(FS*.5,(x.b-x.t)/2+pad)}" style="fill:${col}"/>`}).join('');
+}
+function ringCenter(){const R=S.ring;return {x:R.reduce((s,id)=>s+POS[id].x,0)/R.length,y:R.reduce((s,id)=>s+POS[id].y,0)/R.length}}
 function paintHL(){
   const P=S.path,mark=S.step===1&&!S.ok;
   for(const id in ATOM)ATOM[id].classList.toggle('on',mark&&P.length>1&&P.includes(+id));
   const pairs=new Set();if(mark)for(let i=0;i<P.length-1;i++){pairs.add(P[i]+'-'+P[i+1]);pairs.add(P[i+1]+'-'+P[i])}
   LINES.forEach(L=>{const o=pairs.has(L.b.a+'-'+L.b.b);L.ls.forEach(l=>l.classList.toggle('onp',o))});
   if(P.length<2||S.step===0){hlG.innerHTML='';return}
-  hlG.innerHTML=mark?chainShapes(P,3,'var(--hl)'):chainShapes(P,6.4,'var(--frame)')+chainShapes(P,5,'var(--paper)');
+  const shp=S.ring&&P.length===S.ring.length?ringShapes:chainShapes;
+  hlG.innerHTML=mark?shp(P,3,'var(--hl)'):shp(P,6.4,'var(--frame)')+shp(P,5,'var(--paper)');
 }
-function numEl(id,n,bad){const p=POS[id];return `<span class="num${bad?' bad':''}" style="left:${p.x-FS*.72}px;top:${p.y-FS*1.12}px;font-size:${Math.max(13,FS*.55)}px">${n}</span>`}
+function numPos(id){const p=POS[id];if(S.ring&&S.ring.includes(id)){const c=ringCenter(),dx=c.x-p.x,dy=c.y-p.y,L=Math.hypot(dx,dy)||1,d=Math.min(FS*1.05,L*.55);return {x:p.x+dx/L*d,y:p.y+dy/L*d}}return {x:p.x-FS*.72,y:p.y-FS*1.12}}
+function numEl(id,n,bad,faint){const p=numPos(id);return `<span class="num${bad?' bad':''}" style="left:${p.x}px;top:${p.y}px;font-size:${Math.max(13,FS*.55)}px${faint?';opacity:.4':''}">${n}</span>`}
 function arrowEl(end,nb){
   const p=POS[end],q=POS[nb],b=boxOf(end),len=Math.max(28,FS*1.45),up=q.y<p.y-1;
   const cx=p.x,y=up?b.b+10+len/2:b.t-10-len/2;
@@ -396,6 +534,11 @@ function paintNums(animate,dir,bad){
   if(S.step>=2&&dir){
     numL.innerHTML=dir.map((id,i)=>numEl(id,i+1,bad)).join('');
     if(animate)[...numL.children].forEach((e,i)=>anim(e,[{opacity:0,transform:'translate(-50%,-10%)'},{opacity:1,transform:'translate(-50%,-50%)'}],{duration:240,delay:i*75,easing:'cubic-bezier(.3,.8,.3,1)',fill:'backwards'}));
+  }else if(S.step===2&&S.ring&&!S.ok&&!S.lock){
+    if(S.r1==null){numL.innerHTML='';return}
+    const R=S.ring,i=R.indexOf(S.r1),k=R.length;
+    numL.innerHTML=numEl(S.r1,1,false)+numEl(R[(i+1)%k],'2?',false,true)+numEl(R[(i-1+k)%k],'2?',false,true);
+    if(animate!==false)[...numL.children].forEach(e=>anim(e,[{opacity:0},{opacity:e.style.opacity||1}],{duration:200}));
   }else if(S.step===2&&!S.ok&&!S.lock&&S.path.length>1){
     const P=S.path;numL.innerHTML=arrowEl(P[0],P[1])+arrowEl(P[P.length-1],P[P.length-2]);
     [...numL.children].forEach(e=>anim(e,[{opacity:0},{opacity:1}],{duration:260}));
@@ -420,11 +563,12 @@ function placePop(){
 /* ---------- hlavička a panel ---------- */
 function paintHead(){
   const st=Math.min(S.step,3);
-  $('#title').textContent=S.final?'Hotovo':STEPS[st].t;
-  $('#sub').textContent=S.final?(S.streak>1?`Série ${S.streak} v řadě.`:'Celý postup máš za sebou.'):STEPS[st].s;
-  $('#ruleText').textContent=STEPS[st].r;
-  $('#stepNo').textContent=S.final?'':`${st+1}/4`;
-  $('#bar').style.width=((S.step+(S.ok?1:0))/4*100)+'%';
+  const T=stepTxt(st),off=OPT.hyd?0:1,tot=4-off;
+  $('#title').textContent=S.final?'Hotovo':T.t;
+  $('#sub').textContent=S.final?(S.streak>1?`Série ${S.streak} v řadě.`:'Celý postup máš za sebou.'):T.s;
+  $('#ruleText').textContent=T.r;
+  $('#stepNo').textContent=S.final?'':`${st+1-off}/${tot}`;
+  $('#bar').style.width=((S.step-off+(S.ok?1:0))/tot*100)+'%';
   $('#lvl').value=S.level;
   $('#nameArea').classList.toggle('show',S.step===3);
   paintFoot();
@@ -435,10 +579,10 @@ function paintFoot(){
   if(S.ok){pri.textContent=S.final?'Další příklad':'Pokračovat';pri.disabled=false}
   else{pri.textContent='Zkontrolovat';
     if(S.step===0)pri.disabled=M.atoms.some(a=>S.h[a.id]==null);
-    if(S.step===1)pri.disabled=S.path.length<2;
+    if(S.step===1){pri.disabled=S.path.length<2;if(S.ring)pri.classList.add('hide')}
     if(S.step===2)pri.classList.add('hide');
     if(S.step===3)pri.disabled=!nmString()}
-  clr.classList.toggle('hide',S.ok||!((S.step===1&&S.path.length)||(S.step===3&&nmString())));
+  clr.classList.toggle('hide',S.ok||!((S.step===1&&S.path.length&&!S.ring)||(S.step===3&&nmString())));
   clr.textContent=S.step===3?'vymazat':'smazat';
   help.classList.toggle('hide',S.ok||S.lock);
   placePop();
@@ -462,9 +606,10 @@ function hush(){$('#msg').classList.remove('show');hideFb()}
 /* ---------- průběh ---------- */
 function newProblem(){
   closePick();
-  const g=generate(S.level)||generate(1);M=g.m;SOL=g.sol;ADJ=SOL.adj;
+  const g=generate(S.level,OPT)||generate(1,OPT)||generate(1);M=g.m;SOL=g.sol;ADJ=SOL.adj;
   ORDER=[...M.atoms].sort((a,b)=>a.y-b.y||a.x-b.x).map(a=>a.id);
-  Object.assign(S,{step:0,ok:false,final:false,h:{},sel:ORDER[0],bad:new Set(),path:[],dir:null,lock:false,nm:null,badF:new Set(),helped:false});
+  Object.assign(S,{step:0,ok:false,final:false,h:{},sel:ORDER[0],bad:new Set(),path:[],dir:null,lock:false,nm:null,badF:new Set(),helped:false,ring:SOL.ring||null,r1:null});
+  if(!OPT.hyd){M.atoms.forEach(a=>S.h[a.id]=4-val(ADJ,a.id));S.sel=null;S.step=1}
   hush();paintHead();build(true);paintFoot();
 }
 function solved(t,m){S.ok=true;say('ok',t,m);paintHead();placePop()}
@@ -521,6 +666,35 @@ function checkChain(){
   say('bad','Ještě ne.',m);
 }
 
+/* cyklus */
+function ringTap(id){
+  if(S.ok)return;
+  if(!S.ring.includes(id)){say('hint','','Tohle je větev. Základem je cyklus.');return}
+  S.path=[...S.ring];S.ok=true;paintHL();anim(hlG,[{opacity:0},{opacity:1}],{duration:320});
+  solved('Sedí.',`Základem je cyklus se ${S.ring.length} uhlíky.`);
+}
+function ringNumTap(id,byHelp){
+  if(S.ok||S.lock)return;
+  const R=S.ring,k=R.length;
+  if(!R.includes(id)){say('hint','','Čísluje se jen cyklus. Ťukni na uhlík v kruhu.');return}
+  if(S.r1==null||(!byHelp&&id===S.r1)){S.r1=S.r1===id?null:id;hush();paintNums(true);return}
+  const i=R.indexOf(S.r1),j=R.indexOf(id);
+  if(j!==(i+1)%k&&j!==(i-1+k)%k){S.r1=id;hush();paintNums(true);return}
+  const step=j===(i+1)%k?1:-1,dir=[...Array(k)].map((_,n)=>R[(i+step*n+k*k)%k]);
+  const mine=evalRing(ADJ,dir),[st,d]=stageCmp(mine,SOL.best);
+  const tok=++numTok;S.lock=true;hush();paintFoot();
+  paintNums(true,dir,false);
+  const wait=k*75+260;
+  if(d<=0){S.dir=dir;setTimeout(()=>{if(tok!==numTok)return;S.lock=false;if(byHelp)S.helped=true;solved('Sedí.',numMsg(mine))},wait);return}
+  setTimeout(()=>{
+    if(tok!==numTok)return;
+    paintNums(false,dir,true);[...numL.children].forEach(e=>e.classList.add('shake'));
+    const fade=()=>{if(tok!==numTok)return;S.lock=false;S.r1=null;paintNums(false);paintFoot()};
+    const has1=mine.mb.includes(1)||mine.subs.some(s=>s.loc===1);
+    say('bad','Jinak.',st===3||st===4?'Číslo 1 a 2 musí dostat uhlíky dvojné vazby.':!has1?'Číslo 1 dostane uhlík s větví.':st===5?'Z jedničky pokračuj směrem, kterým vyjdou nižší čísla větví. Porovnávej číslo po čísle.':'Z obou stran vychází stejně, rozhoduje abeceda: nižší číslo dostane větev dřív v abecedě.',fade);
+  },wait);
+}
+
 /* krok 2 */
 let numTok=0;
 function numberFrom(id,byHelp){
@@ -560,7 +734,7 @@ function renderName(){
   const n=S.nm;if(!n){nameEl.innerHTML='';return}
   let h='<div class="nrow"><small>větve</small>';
   n.subs.forEach((g,i)=>{h+=`<span class="grp">${fieldBtn('s'+i+'.locs',g.locs.join(','),'čísla')}<span class="dash">-</span>${fieldBtn('s'+i+'.mult',g.mult,'di/tri?')}${fieldBtn('s'+i+'.alk',g.alk,'větev')}</span>`});
-  h+='<button class="plus" data-add="s">+ větev</button></div><div class="nrow"><small>hlavní řetězec</small>';
+  h+=`<button class="plus" data-add="s">+ větev</button></div><div class="nrow"><small>${S.ring?'základ':'hlavní řetězec'}</small>`;
   h+=`<span class="grp">${fieldBtn('stem',n.stem,'kmen')}</span>`;
   n.bonds.forEach((b,i)=>{const an=b.end==='an';h+=`<span class="grp"><span class="dash">-</span>${fieldBtn('b'+i+'.locs',b.locs.join(','),'čísla',an)}<span class="dash">-</span>${fieldBtn('b'+i+'.mult',b.mult,'di/tri?',an)}${fieldBtn('b'+i+'.end',b.end,'koncovka')}</span>`});
   if(n.bonds.length<2)h+='<button class="plus" data-add="b">+ vazba</button>';
@@ -582,11 +756,12 @@ function openPick(key){
   const cur=f.obj[f.prop];
   $('#pickT').textContent=P.t;
   const O=$('#pickO');O.style.gridTemplateColumns=`repeat(${P.cols},1fr)`;
-  O.innerHTML=P.opts.map(o=>{const on=P.multi?false:cur===o;return `<button data-o="${o}" aria-pressed="${on}">${esc(P.lab&&P.lab[o]!=null?P.lab[o]:o)}</button>`}).join('')+(P.multi?'<button class="wide" data-back="1">smazat poslední číslo</button>':'');
+  const cyc=f.kind==='stem'&&!!S.nm.cyc;
+  O.innerHTML=(f.kind==='stem'?`<button class="tog" data-cyc="1" aria-pressed="${cyc}">předpona cyklo- ${cyc?'zapnutá':'vypnutá'}</button>`:'')+P.opts.map(o=>{const on=P.multi?false:f.kind==='stem'?cur===(cyc?'cyklo':'')+o:cur===o;return `<button data-o="${o}" aria-pressed="${on}">${esc(P.lab&&P.lab[o]!=null?P.lab[o]:o)}</button>`}).join('')+(P.multi?'<button class="wide" data-back="1">smazat poslední číslo</button>':'');
   pickTitle();
   const canDel=(f.grp==='s'&&f.kind==='alk')||(f.grp==='b'&&f.kind==='end'&&S.nm.bonds.length>1);
   $('#pickDel').classList.toggle('hide',!canDel);$('#pickDel').textContent=f.grp==='s'?'odebrat větev':'odebrat vazbu';
-  $('#pickOk').classList.toggle('hide',!P.multi);
+  $('#pickOk').textContent=P.multi?'Hotovo':'Zavřít';
   const pk=$('#pick'),was=pk.classList.contains('show');pk.classList.add('show');
   if(!was)anim(pk.querySelector('.in'),[{transform:'translateY(100%)'},{transform:'none'}],{duration:240,easing:'cubic-bezier(.3,.8,.3,1)'});
   renderName();
@@ -594,11 +769,12 @@ function openPick(key){
 function pickTitle(){if(!PK)return;const P=PICK[PK.kind];$('#pickT').textContent=P.multi?`${P.t}: ${PK.obj[PK.prop].join(',')||'zatím nic'}  ·  stejné číslo můžeš dát víckrát (2,2)`:P.t}
 function closePick(){PK=null;$('#pick').classList.remove('show');if(S.nm)renderName()}
 $('#pickO').addEventListener('click',e=>{if(!PK)return;
+  if(e.target.closest('button[data-cyc]')){S.nm.cyc=!S.nm.cyc;if(S.nm.stem)S.nm.stem=S.nm.cyc?'cyklo'+S.nm.stem.replace(/^cyklo/,''):S.nm.stem.replace(/^cyklo/,'');openPick(PK.key);return}
   if(e.target.closest('button[data-back]')){PK.obj[PK.prop].pop();S.badF.delete(PK.key);pickTitle();renderName();return}
   const b=e.target.closest('button[data-o]');if(!b)return;const P=PICK[PK.kind],o=b.dataset.o;
   S.badF.delete(PK.key);hush();
   if(P.multi){const arr=PK.obj[PK.prop];if(arr.length<4){arr.push(+o);arr.sort((a,c)=>a-c)}anim(b,[{transform:'scale(.92)'},{transform:'none'}],{duration:160});pickTitle();renderName()}
-  else{PK.obj[PK.prop]=o;if(PK.kind==='end'&&o==='an'){PK.obj.locs=[];PK.obj.mult=''}closePick()}});
+  else{PK.obj[PK.prop]=PK.kind==='stem'&&S.nm.cyc?'cyklo'+o:o;if(PK.kind==='end'&&o==='an'){PK.obj.locs=[];PK.obj.mult=''}closePick()}});
 $('#pickOk').addEventListener('click',closePick);
 $('#pickDel').addEventListener('click',()=>{if(!PK)return;PK.arr.splice(PK.idx,1);S.badF.clear();closePick()});
 nameEl.addEventListener('click',e=>{
@@ -607,12 +783,21 @@ nameEl.addEventListener('click',e=>{
   const p=e.target.closest('.plus');if(p){hush();if(p.dataset.add==='s')S.nm.subs.push({locs:[],mult:'',alk:''});else S.nm.bonds.push({locs:[],mult:'',end:''});S.badF.clear();renderName()}
 });
 function target(){
-  const sg={},n=SOL.best;n.subs.forEach(s=>(sg[s.name]=sg[s.name]||[]).push(s.loc));
-  const subs=Object.keys(sg).sort().map(k=>({alk:k,locs:sg[k].sort((a,b)=>a-b),mult:MULT[sg[k].length]||''}));
-  const d=n.dl.length,t=n.tl.length,stem=SOL.tokens.find(x=>x.k==='stem').t;
-  const short=n.len<=3&&d+t===1;
-  const bonds=d+t===0?[{end:'an',locs:[],mult:''}]:[...(d?[{end:'en',locs:short?[]:n.dl,mult:MULT[d]||''}]:[]),...(t?[{end:'yn',locs:short?[]:n.tl,mult:MULT[t]||''}]:[])];
-  return {subs,stem,bonds};
+  const T={subs:[],stem:'',bonds:[]};let cur=null,after=false;
+  const locs=t=>t.replace(/-/g,'').split(',').filter(Boolean).map(Number);
+  for(const tk of SOL.tokens){
+    if(tk.k==='stem'){T.stem=tk.t;after=true;cur=null;continue}
+    if(!after){
+      if(tk.k==='loc'){cur={locs:locs(tk.t),mult:'',alk:''};T.subs.push(cur)}
+      else if(tk.k==='mult'){if(!cur){cur={locs:[],mult:'',alk:''};T.subs.push(cur)}cur.mult=tk.t}
+      else if(tk.k==='alk'){if(!cur||cur.alk){cur={locs:[],mult:'',alk:''};T.subs.push(cur)}cur.alk=tk.t;cur=null}
+    }else{
+      if(tk.k==='loc'){cur={locs:locs(tk.t),mult:'',end:''};T.bonds.push(cur)}
+      else if(tk.k==='mult'){if(!cur){cur={locs:[],mult:'',end:''};T.bonds.push(cur)}cur.mult=tk.t}
+      else if(tk.k==='end'){if(!cur||cur.end){cur={locs:[],mult:'',end:''};T.bonds.push(cur)}cur.end=tk.t;cur=null}
+    }
+  }
+  return T;
 }
 function checkName(){
   closePick();
@@ -627,13 +812,14 @@ function checkName(){
   const names=us.map(g=>g.alk),tn=T.subs.map(g=>g.alk);
   if(!m&&[...names].sort().join()!==[...tn].sort().join()){us.forEach(g=>{if(!tn.includes(g.alk)||names.filter(x=>x===g.alk).length>1)bad.add('s'+g.i+'.alk')});m=names.length!==tn.length?`Různých druhů větví je ${tn.length}. Stejné větve patří do jednoho políčka s di-, tri-, tetra-.`:'Spočítej uhlíky ve větvích: methyl 1, ethyl 2, propyl 3, butyl 4. Isopropyl je trojuhlíková větev připojená prostředním uhlíkem.'}
   if(!m&&names.join()!==tn.join()){us.forEach(g=>bad.add('s'+g.i+'.alk'));m='Větve se řadí abecedně, di- a tri- se do abecedy nepočítají.'}
-  if(!m){us.forEach(g=>{const tg=T.subs.find(x=>x.alk===g.alk);if(g.locs.join()!==tg.locs.join())bad.add('s'+g.i+'.locs')});if(bad.size)m='Čísla u větví nesedí s tvým číslováním. Každá větev musí mít svoje číslo.'}
+  if(!m){us.forEach(g=>{const tg=T.subs.find(x=>x.alk===g.alk);if(g.locs.join()!==tg.locs.join())bad.add('s'+g.i+'.locs')});if(bad.size)m=T.subs.length===1&&!T.subs[0].locs.length?'Jediná větev na cyklu se nečísluje, políčko s čísly nech prázdné.':'Čísla u větví nesedí s tvým číslováním. Každá větev musí mít svoje číslo.'}
   if(!m){us.forEach(g=>{const tg=T.subs.find(x=>x.alk===g.alk);if(g.mult!==tg.mult)bad.add('s'+g.i+'.mult')});if(bad.size)m='Předpona u větve musí odpovídat počtu čísel: dvě čísla = di, tři = tri, čtyři = tetra.'}
-  if(!m&&n.stem.replace(/a$/,'')!==T.stem.replace(/a$/,'')){bad.add('stem');m=`Kmen se řídí počtem uhlíků hlavního řetězce, tady ${SOL.best.len}.`}
+  if(!m&&/^cyklo/.test(n.stem)!==/^cyklo/.test(T.stem)){bad.add('stem');m=S.ring?'Základem je cyklus, kmen potřebuje předponu cyklo- (zapneš ji v nabídce kmene).':'Tady žádný cyklus není, předponu cyklo- vypni.'}
+  if(!m&&n.stem.replace(/a$/,'')!==T.stem.replace(/a$/,'')){bad.add('stem');m=`Kmen se řídí počtem uhlíků ${S.ring?'v cyklu':'hlavního řetězce'}, tady ${SOL.best.len}.`}
   if(!m&&n.stem!==T.stem){bad.add('stem');m='Pozor na -a-: ke kmeni se přidává jen před di-, tri- v koncovce (buta-1,3-dien).'}
   const ub=n.bonds.map((b,i)=>({...b,i})).filter(b=>b.end);
   if(!m&&ub.map(b=>b.end).join()!==T.bonds.map(b=>b.end).join()){ub.forEach(b=>bad.add('b'+b.i+'.end'));m=T.bonds.length===2?'Jsou tu dvojné i trojné vazby: koncovka -en a pak -yn.':'Koncovka podle vazeb: -an jen jednoduché, -en dvojná, -yn trojná.'}
-  if(!m){ub.forEach((b,k)=>{if(b.locs.join()!==T.bonds[k].locs.join())bad.add('b'+b.i+'.locs')});if(bad.size)m=T.bonds[0].locs.length?'Čísla násobných vazeb nesedí. Píše se nižší číslo z obou uhlíků vazby.':'U ethenu a propenu se číslo nepíše.'}
+  if(!m){ub.forEach((b,k)=>{if(b.locs.join()!==T.bonds[k].locs.join())bad.add('b'+b.i+'.locs')});if(bad.size)m=T.bonds[0].locs.length?'Čísla násobných vazeb nesedí. Píše se nižší číslo z obou uhlíků vazby.':S.ring?'U cykloalkenu s jednou dvojnou vazbou se její číslo nepíše, je vždy 1.':'U ethenu a propenu se číslo nepíše.'}
   if(!m){ub.forEach((b,k)=>{if(b.mult!==T.bonds[k].mult)bad.add('b'+b.i+'.mult')});if(bad.size)m='Předpona u koncovky musí odpovídat počtu vazeb: dvě dvojné = dien.'}
   if(!m)m='Něco v zápisu nesedí. Zkontroluj pořadí a spojovníky.';
   S.badF=bad;renderName();
@@ -653,15 +839,17 @@ function finish(){
 function help(){
   S.helped=true;hideFb();
   if(S.step===0){M.atoms.forEach(a=>{S.h[a.id]=4-val(ADJ,a.id)});S.bad.clear();S.sel=null;S.ok=true;M.atoms.forEach(a=>paintSlot(a.id,true));updateBonds();solved('Takhle to vychází.','Vodíků je vždy 4 minus počet vazeb k uhlíkům.');return}
+  if(S.step===1&&S.ring){S.path=[...S.ring];S.ok=true;paintHL();solved('Základem je cyklus.',`Má ${S.ring.length} uhlíků.`);return}
   if(S.step===1){S.path=[...SOL.best.P];S.ok=true;paintHL();solved('Tudy vede hlavní řetězec.',`Má ${S.path.length} uhlíků.`);return}
+  if(S.step===2&&S.ring){numTok++;S.lock=false;S.dir=null;S.r1=SOL.best.P[0];ringNumTap(SOL.best.P[1],true);return}
   if(S.step===2){numTok++;S.lock=false;S.dir=null;const d=bestDir(ADJ,S.path).P;numberFrom(d[0],true);return}
-  if(S.step===3){closePick();const T=target();S.nm={subs:T.subs.map(g=>({...g,locs:[...g.locs]})),stem:T.stem,bonds:T.bonds.map(b=>({...b,locs:[...b.locs]}))};finish()}
+  if(S.step===3){closePick();const T=target();S.nm={subs:T.subs.map(g=>({...g,locs:[...g.locs]})),stem:T.stem,cyc:/^cyklo/.test(T.stem),bonds:T.bonds.map(b=>({...b,locs:[...b.locs]}))};finish()}
 }
 
 /* ---------- události ---------- */
 board.addEventListener('pointerdown',e=>{
   const a=e.target.closest('.atom');if(!a)return;const id=+a.dataset.id;
-  if(S.step===1&&!S.ok){e.preventDefault();chainDrag=true;chainTap(id)}
+  if(S.step===1&&!S.ok&&!S.ring){e.preventDefault();chainDrag=true;chainTap(id)}
 });
 window.addEventListener('pointermove',e=>{if(chainDrag){lastPt={x:e.clientX,y:e.clientY};if(!raf)raf=requestAnimationFrame(chainMove)}},{passive:true});
 const endDrag=()=>{if(chainDrag){chainDrag=false;lastPt=null;paintFoot()}};
@@ -670,13 +858,18 @@ board.addEventListener('click',e=>{
   const ar=e.target.closest('.arrow');if(ar)return numberFrom(+ar.dataset.end);
   const a=e.target.closest('.atom');if(!a)return;const id=+a.dataset.id;
   if(S.step===0&&!S.ok)chooseAtom(id);
+  else if(S.step===1&&S.ring)ringTap(id);
   else if(S.step===1&&!S.ok&&e.detail===0)chainTap(id);
-  else if(S.step===2)numberFrom(id);
+  else if(S.step===2)S.ring?ringNumTap(id):numberFrom(id);
 });
 $('#hpop').addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(b)setH(+b.dataset.v)});
 $('#pri').addEventListener('click',()=>{if(S.ok)return next();[checkH,checkChain,null,checkName][S.step]?.()});
 $('#clr').addEventListener('click',()=>{hush();if(S.step===1){S.path=[];paintHL()}if(S.step===3){S.nm={subs:[{locs:[],mult:'',alk:''}],stem:'',bonds:[{locs:[],mult:'',end:''}]};S.badF.clear();renderName()}paintFoot()});
 $('#help').addEventListener('click',help);
+$('#setBtn').addEventListener('click',openSets);
+$('#setOk').addEventListener('click',closeSets);
+$('#setReset').addEventListener('click',()=>{OPT=Object.assign({},OPTDEF);renderSets()});
+$('#setList').addEventListener('click',e=>{const b=e.target.closest('.sw');if(!b||b.disabled)return;const k=b.dataset.k;OPT[k]=!OPT[k];if(k==='cyclo'&&!OPT.cyclo)OPT.onlyCyclo=false;renderSets()});
 $('#fbHelp').addEventListener('click',help);
 $('#fbBtn').addEventListener('click',()=>{if(S.ok){hideFb();return next()}const a=fbAfter;fbAfter=null;hideFb();a&&a()});
 $('#ruleBtn').addEventListener('click',()=>{const o=$('#ruleText').classList.toggle('open');$('#ruleBtn').setAttribute('aria-expanded',o);build(false);paintFoot()});
