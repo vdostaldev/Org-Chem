@@ -54,6 +54,7 @@ background-color:var(--paper);background-image:linear-gradient(var(--grid2) 1px,
 .bond.onp{stroke:var(--hlink)}
 .atom{position:absolute;display:block;border:0;padding:2px 1px 2px 2px;background:none;font-family:Literata,Georgia,serif;line-height:1;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;transform:translate(-50%,-50%);color:var(--ink)}
 .atom .c{display:inline-block}
+.atom.het{cursor:default}
 .atom.on{color:var(--hlink)}
 .atom:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:4px}
 .slot{position:absolute;left:100%;top:0;padding:2px 2px 2px 0;line-height:1;white-space:nowrap}
@@ -98,7 +99,7 @@ background-color:var(--paper);background-image:linear-gradient(var(--grid2) 1px,
 .preview.empty{font-weight:400;font-style:italic;color:var(--mute);font-size:15px}
 .pick{position:fixed;left:0;right:0;bottom:0;z-index:35;display:none}
 .pick.show{display:block}
-.pick .in{max-width:620px;margin:0 auto;background:var(--paper);border:1px solid var(--ink);border-bottom:0;border-radius:16px 16px 0 0;padding:14px 16px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -8px 24px rgba(0,0,0,.08)}
+.pick .in{max-height:86vh;overflow-y:auto;max-width:620px;margin:0 auto;background:var(--paper);border:1px solid var(--ink);border-bottom:0;border-radius:16px 16px 0 0;padding:14px 16px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -8px 24px rgba(0,0,0,.08)}
 .pick h3{margin:0 0 10px;font-size:14px;font-weight:600}
 .opts{display:grid;gap:6px}
 .opts button{min-height:46px;border:1px solid color-mix(in srgb,var(--ink) 30%,transparent);border-radius:9px;background:none;font-family:Literata,Georgia,serif;font-size:18px;cursor:pointer;transition:background .12s,color .12s}
@@ -186,32 +187,49 @@ const RM=matchMedia('(prefers-reduced-motion: reduce)');
 const anim=(el,k,o)=>RM.matches||!el||!el.animate?null:el.animate(k,o);
 
 /* ---------- chemie ---------- */
-function adjOf(m){const adj=m.atoms.map(()=>[]);for(const b of m.bonds){adj[b.a].push({to:b.b,o:b.o});adj[b.b].push({to:b.a,o:b.o})}return adj}
+const HAL={F:'fluor',Cl:'chlor',Br:'brom',I:'jod'};
+const HVAL={F:1,Cl:1,Br:1,I:1,OH:1,O:2};
+function adjOf(m){const adj=m.atoms.map(()=>[]);for(const b of m.bonds){adj[b.a].push({to:b.b,o:b.o});adj[b.b].push({to:b.a,o:b.o})}adj.T=m.atoms.map(a=>a.t||'C');return adj}
+const isC=(adj,id)=>!adj.T||adj.T[id]==='C';
 const val=(adj,id)=>adj[id].reduce((s,e)=>s+e.o,0);
 const bo=(adj,a,b)=>{const e=adj[a].find(e=>e.to===b);return e?e.o:0};
-function pathBetween(adj,u,v){const prev=new Map([[u,-1]]);const q=[u];while(q.length){const x=q.shift();if(x===v)break;for(const e of adj[x])if(!prev.has(e.to)){prev.set(e.to,x);q.push(e.to)}}const P=[];let c=v;while(c!==-1){P.push(c);c=prev.get(c)}return P.reverse()}
-function branchesOf(adj,P){
-  const inP=new Set(P),subs=[];let valid=true;
-  P.forEach((id,i)=>{for(const e of adj[id]){if(inP.has(e.to))continue;
+const cdeg=(adj,id)=>adj[id].filter(e=>isC(adj,e.to)).length;
+function pathBetween(adj,u,v){const prev=new Map([[u,-1]]);const q=[u];while(q.length){const x=q.shift();if(x===v)break;for(const e of adj[x])if(isC(adj,e.to)&&!prev.has(e.to)){prev.set(e.to,x);q.push(e.to)}}const P=[];let c=v;while(c!==-1){P.push(c);c=prev.get(c)}return P.reverse()}
+function branchesOf(adj,P,chain){
+  const inP=new Set(P),subs=[],g={};let valid=true;
+  const hetOn=id=>adj[id].some(f=>!isC(adj,f.to));
+  P.forEach((id,i)=>{for(const e of adj[id]){if(inP.has(e.to))continue;const t=adj.T?adj.T[e.to]:'C';
+    if(t!=='C'){if(HAL[t])subs.push({loc:i+1,name:HAL[t]});else{(g[i]=g[i]||{})[t]=true}continue}
     if(e.o!==1)valid=false;
     const first=adj[e.to].filter(f=>f.to!==id);
-    if(first.length===2&&first.every(f=>f.o===1&&adj[f.to].length===1)){subs.push({loc:i+1,name:'isopropyl'});continue}
+    if(first.length===2&&first.every(f=>f.o===1&&isC(adj,f.to)&&adj[f.to].length===1)){subs.push({loc:i+1,name:'isopropyl'});continue}
     let len=1,prev=id,cur=e.to;
-    for(;;){const nx=adj[cur].filter(f=>f.to!==prev);if(!nx.length)break;if(nx.length>1){valid=false;break}if(nx[0].o!==1)valid=false;prev=cur;cur=nx[0].to;len++}
+    for(;;){if(hetOn(cur))valid=false;const nx=adj[cur].filter(f=>f.to!==prev);if(!nx.length)break;if(nx.length>1){valid=false;break}if(nx[0].o!==1)valid=false;prev=cur;cur=nx[0].to;len++}
     if(len>4)valid=false;subs.push({loc:i+1,name:ALK[Math.min(len,4)]})}});
+  const pl=[];let cls=null;const rank={acid:4,al:3,on:2,ol:1};
+  for(const k in g){const i=+k,x=g[k],end=chain&&(i===0||i===P.length-1);let c;
+    if(x.O&&x.OH){c='acid';if(!end)valid=false}
+    else if(x.O)c=end&&cdeg(adj,P[i])<=1?'al':'on';
+    else c='ol';
+    if(!chain&&c!=='ol'&&c!=='on')valid=false;
+    if(cls&&cls!==c){valid=false;if(rank[c]>rank[cls])cls=c}else cls=c;
+    pl.push(i+1)}
+  pl.sort((a,b)=>a-b);
+  if(!chain&&cls)valid=false;
   const sl=subs.map(s=>s.loc).sort((a,b)=>a-b);
   const alpha=[...subs].sort((a,b)=>(a.name<b.name?-1:a.name>b.name?1:0)||a.loc-b.loc).map(s=>s.loc);
-  return {subs,sl,alpha,valid};
+  return {subs,sl,alpha,valid,pl,cls};
 }
 function evalPath(adj,P){
   const mb=[],dl=[],tl=[];
   for(let i=0;i<P.length-1;i++){const o=bo(adj,P[i],P[i+1]);if(o>1){mb.push(i+1);(o===2?dl:tl).push(i+1)}}
-  return {P,len:P.length,mb,dl,tl,...branchesOf(adj,P)};
+  return {P,len:P.length,mb,dl,tl,...branchesOf(adj,P,true)};
 }
+function isArom(adj,P){if(P.length!==6)return false;const o=P.map((id,i)=>bo(adj,id,P[(i+1)%6]));return o.join()==='2,1,2,1,2,1'||o.join()==='1,2,1,2,1,2'}
 function evalRing(adj,P){
-  const k=P.length,mb=[],dl=[],tl=[];
-  for(let i=0;i<k;i++){const o=bo(adj,P[i],P[(i+1)%k]);if(o>1){mb.push(i+1);(o===2?dl:tl).push(i+1)}}
-  return {P,len:k,ring:true,mb,dl,tl,...branchesOf(adj,P)};
+  const k=P.length,mb=[],dl=[],tl=[],arom=isArom(adj,P);
+  if(!arom)for(let i=0;i<k;i++){const o=bo(adj,P[i],P[(i+1)%k]);if(o>1){mb.push(i+1);(o===2?dl:tl).push(i+1)}}
+  return {P,len:k,ring:true,arom,mb,dl,tl,...branchesOf(adj,P,false)};
 }
 function findRing(adj){
   const n=adj.length,deg=adj.map(a=>a.length),alive=new Set([...Array(n).keys()]);
@@ -224,32 +242,42 @@ function findRing(adj){
 }
 function ringOrders(ring){const k=ring.length,out=[];for(let i=0;i<k;i++){out.push([...Array(k)].map((_,j)=>ring[(i+j)%k]));out.push([...Array(k)].map((_,j)=>ring[(i-j+k)%k]))}return out}
 const lex=(a,b)=>{for(let i=0;i<Math.min(a.length,b.length);i++)if(a[i]!==b[i])return a[i]-b[i];return a.length-b.length};
+/* fáze porovnání: 0 počet hlavních skupin, 1 násobné vazby, 2 délka, 3 větve, 4 čísla skupin, 5 čísla vazeb, 6 dvojná před trojnou, 7 čísla větví, 8 abeceda */
 function stageCmp(x,y){
-  const st=[()=>y.mb.length-x.mb.length,()=>y.len-x.len,()=>y.subs.length-x.subs.length,()=>lex(x.mb,y.mb),()=>lex(x.dl,y.dl),()=>lex(x.sl,y.sl),()=>lex(x.alpha,y.alpha)];
+  const st=[()=>y.pl.length-x.pl.length,()=>y.mb.length-x.mb.length,()=>y.len-x.len,()=>y.subs.length-x.subs.length,()=>lex(x.pl,y.pl),()=>lex(x.mb,y.mb),()=>lex(x.dl,y.dl),()=>lex(x.sl,y.sl),()=>lex(x.alpha,y.alpha)];
   for(let i=0;i<st.length;i++){const d=st[i]();if(d)return [i,d]}return [-1,0];
 }
 function buildName(c){
   const tokens=[],groups={};
+  if(c.cls==='acid')tokens.push({t:'kyselina ',k:'kys'});
   c.subs.forEach(s=>(groups[s.name]=groups[s.name]||[]).push(s.loc));
   Object.keys(groups).sort().forEach((nm,gi)=>{const locs=groups[nm].sort((a,b)=>a-b),ls=locs.join(',');
     tokens.push({t:gi?'-'+ls+'-':ls+'-',k:'loc'});if(locs.length>1)tokens.push({t:MULT[locs.length],k:'mult'});tokens.push({t:nm,k:'alk'})});
   const d=c.dl.length,t=c.tl.length,needA=d>=2||(d===0&&t>=2);
+  const str=()=>({tokens,str:tokens.map(x=>x.t).join('')});
+  const firstLoc=()=>{const i=tokens.findIndex(x=>x.k==='loc');return i};
   if(c.ring){
-    if(c.subs.length===1&&d+t===0&&tokens[0]&&tokens[0].k==='loc')tokens.shift();
+    if(c.subs.length===1&&d+t===0){const i=firstLoc();if(i>=0)tokens.splice(i,1)}
+    if(c.arom){tokens.push({t:'benzen',k:'stem'});return str()}
     tokens.push({t:'cyklo'+STEMS[c.len]+(needA?'a':''),k:'stem'});
     if(d+t===0)tokens.push({t:'an',k:'end'});
     else if(d===1)tokens.push({t:'en',k:'end'});
     else{tokens.push({t:'-'+c.dl.join(',')+'-',k:'loc'});tokens.push({t:MULT[d],k:'mult'});tokens.push({t:'en',k:'end'})}
-    return {tokens,str:tokens.map(x=>x.t).join('')};
+    return str();
   }
   tokens.push({t:STEMS[c.len]+(needA?'a':''),k:'stem'});
   if(d+t===0)tokens.push({t:'an',k:'end'});
-  else if(c.len<=3&&d+t===1)tokens.push({t:d?'en':'yn',k:'end'});
+  else if(c.len<=3&&d+t===1&&!c.cls)tokens.push({t:d?'en':'yn',k:'end'});
   else{
     if(d){tokens.push({t:'-'+c.dl.join(',')+'-',k:'loc'});if(d>1)tokens.push({t:MULT[d],k:'mult'});tokens.push({t:'en',k:'end'})}
     if(t){tokens.push({t:'-'+c.tl.join(',')+'-',k:'loc'});if(t>1)tokens.push({t:MULT[t],k:'mult'});tokens.push({t:'yn',k:'end'})}
   }
-  return {tokens,str:tokens.map(x=>x.t).join('')};
+  if(c.cls){
+    const n=c.pl.length;
+    if(c.cls==='ol'||c.cls==='on'){if(!(c.cls==='ol'&&c.len<=2&&n===1))tokens.push({t:'-'+c.pl.join(',')+'-',k:'sloc'});if(n>1)tokens.push({t:MULT[n],k:'smult'});tokens.push({t:c.cls,k:'suf'})}
+    else tokens.push({t:c.cls==='al'?'al':'ová',k:'suf'});
+  }
+  return str();
 }
 function bestDir(adj,P){const a=evalPath(adj,P),b=evalPath(adj,[...P].reverse());return stageCmp(a,b)[1]<=0?a:b}
 function solve(m){
@@ -258,9 +286,9 @@ function solve(m){
     const cands=ringOrders(ring).map(P=>evalRing(adj,P));
     cands.sort((x,y)=>stageCmp(x,y)[1]);
     const best=cands[0];if(!best.valid)return null;
-    const nm=buildName(best);return {best,adj,name:nm.str,tokens:nm.tokens,ring};
+    const nm=buildName(best);return {best,adj,name:nm.str,tokens:nm.tokens,ring,arom:best.arom};
   }
-  const leaves=m.atoms.filter(a=>adj[a.id].length===1).map(a=>a.id);
+  const leaves=m.atoms.filter(a=>isC(adj,a.id)&&cdeg(adj,a.id)<=1).map(a=>a.id);
   const cands=[];
   for(const u of leaves)for(const v of leaves)if(u!==v)cands.push(evalPath(adj,pathBetween(adj,u,v)));
   cands.sort((x,y)=>stageCmp(x,y)[1]);
@@ -269,30 +297,57 @@ function solve(m){
   const nm=buildName(best);
   return {best,adj,name:nm.str,tokens:nm.tokens};
 }
-const OPTDEF={hyd:true,dbl:true,tri:true,multi:true,longAlk:true,iso:true,cyclo:false,onlyCyclo:false};
+const OPTDEF={hyd:true,dbl:true,tri:true,multi:true,longAlk:true,iso:true,cyclo:false,onlyCyclo:false,arom:false,halo:false,ol:false,onal:false,acid:false};
 function allowed(sol,o){
   const b=sol.best,names=new Set(b.subs.map(s=>s.name));
-  if(!o.longAlk&&[...names].some(n=>n!=='methyl'&&n!=='isopropyl'))return false;
+  if(!o.longAlk&&[...names].some(n=>['ethyl','propyl','butyl'].includes(n)))return false;
   if(!o.iso&&names.has('isopropyl'))return false;
+  if(!o.halo&&[...names].some(n=>Object.values(HAL).includes(n)))return false;
+  if(names.has('chlor')&&(names.has('ethyl')||names.has('fluor')))return false;
   if(!o.dbl&&b.dl.length)return false;
   if(!o.tri&&b.tl.length)return false;
   if(!o.multi&&b.dl.length+b.tl.length>1)return false;
+  if(b.cls==='ol'&&!o.ol)return false;
+  if((b.cls==='al'||b.cls==='on')&&!o.onal)return false;
+  if(b.cls==='acid'&&!o.acid)return false;
+  if(b.arom&&!o.arom)return false;
   return true;
+}
+const HALS=['F','Cl','Br','I'];
+function kindPool(level,o,ring){
+  const p=['m','m'];
+  if(o.longAlk)p.push(...(level===1?['e']:ring?['e','e','p']:['e','e','p','b']));
+  if(o.iso&&level>1)p.push('i');
+  if(o.halo)p.push('Cl','Br','F','I','Cl','Br');
+  return p;
 }
 function generate(level,o){
   o=Object.assign({},OPTDEF,o||{});
-  if((o.cyclo||o.onlyCyclo)&&(o.onlyCyclo||Math.random()<.35)){const r=genRing(level,o);if(r)return r}
+  const cats=[];
+  if(!o.onlyCyclo){cats.push('chain','chain');if(o.ol||o.onal||o.acid)cats.push('chain')}
+  if(o.cyclo)cats.push('ring');
+  if(o.arom)cats.push('benz');
+  if(!cats.length)cats.push(o.onlyCyclo?'ring':'chain');
+  const cat=pick(cats);
+  if(cat==='ring'){const r=genRing(level,o);if(r)return r}
+  if(cat==='benz'){const r=genBenz(level,o);if(r)return r}
+  return genChain(level,o);
+}
+function genChain(level,o){
   const X=level===4;
+  const gcls=[...(o.ol?['ol','ol']:[]),...(o.onal?['on','al']:[]),...(o.acid?['acid']:[])];
   for(let t=0;t<3000;t++){
+    const G=gcls.length&&Math.random()<.65?pick(gcls):null;
     const atoms=[],bonds=[];
-    const add=(x,y)=>{atoms.push({id:atoms.length,x,y});return atoms.length-1};
-    const n=level===1?ri(4,6):level===2?ri(5,7):X?ri(6,7):ri(5,7);
+    const add=(x,y,tt)=>{atoms.push({id:atoms.length,x,y,...(tt?{t:tt}:{})});return atoms.length-1};
+    const n=G?(level===1?ri(3,5):level===2?ri(4,6):ri(4,7)):level===1?ri(4,6):level===2?ri(5,7):X?ri(6,7):ri(5,7);
     for(let i=0;i<n;i++)add(i,0);
     const orders=Array(n-1).fill(1);
     let plan=[];
     if(level===2){const r=Math.random();plan=r<.15?[]:r<.75?[2]:[3]}
     if(level===3){const r=Math.random();plan=r<.2?[pick([2,3])]:r<.72?[2,2]:pick([[2,3],[3,2]])}
     if(X){const r=Math.random();plan=r<.4?[]:r<.75?[2]:r<.9?[2,2]:[3]}
+    if(G&&Math.random()<.5)plan=plan.slice(0,1);
     plan=plan.map(b=>b===2&&!o.dbl?(o.tri?3:0):b===3&&!o.tri?(o.dbl?2:0):b).filter(Boolean);
     if(!o.multi)plan=plan.slice(0,1);
     const used=[];let ok=true;
@@ -300,13 +355,29 @@ function generate(level,o){
     if(!ok)continue;
     orders.forEach((b,i)=>bonds.push({a:i,b:i+1,o:b}));
     const m={atoms,bonds};
-    const ns=level===1?ri(1,2):level===2?ri(1,2):X?ri(3,5):ri(2,3);
     const occ=new Set(atoms.map(a=>a.x+','+a.y));
-    const pool=['m','m',...(o.longAlk?['e','e','p','b']:[]),...(o.iso?['i']:[])];
-    const kinds=[];
-    if(X){const main=pick(pool.filter(k=>k!=='b'));for(let s=0;s<ns;s++)kinds.push(Math.random()<.6?main:pick(pool))}
-    else for(let s=0;s<ns;s++){const r=Math.random();kinds.push(o.iso&&level>1&&r<.15?'i':!o.longAlk||r<(level===3?.5:.65)?'m':pick(level===1?['e']:['e','e','p']))}
     const free=(x,y)=>!occ.has(x+','+y)&&!occ.has((x-1)+','+y)&&!occ.has((x+1)+','+y);
+    const put=(p,cells)=>{for(const sd of shuffle([1,-1])){const cs=cells.map(([dx,dy,tt,bo])=>[p+dx,sd*dy,tt,bo]);if(cs.some(([x,y])=>!free(x,y)))continue;cs.forEach(([x,y,tt,b])=>{const id=add(x,y,tt);bonds.push({a:p,b:id,o:b||1});occ.add(x+','+y)});return true}return false};
+    // hlavní skupiny
+    if(G){
+      let need=G==='ol'&&level>=3&&Math.random()<.3?2:G==='on'&&level>=3&&n>=5&&Math.random()<.25?2:1,tries=0;
+      while(need&&tries++<40){
+        let p;
+        if(G==='al'||G==='acid'){p=pick([0,n-1]);if(orders[p===0?0:n-2]!==1)continue;if(atoms.some((a,i)=>i>=n&&Math.round(a.x)===p))continue}
+        else if(G==='on'){p=ri(1,n-2);if(val(adjOf(m),p)!==2)continue}
+        else{p=ri(0,n-1);const A=adjOf(m);if(val(A,p)>3||A[p].some(e=>e.o>1))continue}
+        if(atoms.some((a,i)=>i>=n&&Math.round(a.x)===p))continue;
+        if(G==='acid'){const sd=pick([1,-1]);if(!free(p,sd)||!free(p,-sd))continue;
+          const a1=add(p,sd,'O');bonds.push({a:p,b:a1,o:2});occ.add(p+','+sd);const a2=add(p,-sd,'OH');bonds.push({a:p,b:a2,o:1});occ.add(p+','+(-sd));need--;continue}
+        if(put(p,[[0,1,G==='ol'?'OH':'O',G==='ol'?1:2]]))need--;
+      }
+      if(need)continue;
+    }
+    const ns=G?(level===1?ri(0,1):level===2?ri(1,2):ri(1,3)):level===1?ri(1,2):level===2?ri(1,2):X?ri(3,5):ri(2,3);
+    const pool=kindPool(level,o,false);
+    const kinds=[];
+    if(X&&!G){const main=pick(pool.filter(k=>k!=='b'));for(let s=0;s<ns;s++)kinds.push(Math.random()<.6?main:pick(pool))}
+    else for(let s=0;s<ns;s++)kinds.push(pick(pool));
     let fail=false;
     for(let s=0;s<ns&&!fail;s++){
       let done=false;
@@ -314,6 +385,7 @@ function generate(level,o){
         const p=ri(1,n-2);
         if(val(adjOf(m),p)+1>4)continue;
         const kind=kinds[s];
+        if(HALS.includes(kind)){done=put(p,[[0,1,kind,1]]);continue}
         const L={m:1,e:2,p:3,b:4,i:1}[kind];
         for(const sd of shuffle([1,-1])){
           const cells=[];for(let j=1;j<=L;j++)cells.push([p,sd*j]);
@@ -331,53 +403,70 @@ function generate(level,o){
     }
     if(fail)continue;
     const sol=solve(m);
-    if(!sol||sol.best.len<4||sol.best.len>12||!allowed(sol,o))continue;
+    if(!sol||sol.best.len<(G?3:4)||sol.best.len>12||!allowed(sol,o))continue;
+    if(G&&sol.best.cls!==G)continue;
     if(level===1&&sol.best.subs.length>2)continue;
-    if(X){const cnt={};sol.best.subs.forEach(s=>cnt[s.name]=(cnt[s.name]||0)+1);const vals=Object.values(cnt);
+    if(X&&!G){const cnt={};sol.best.subs.forEach(s=>cnt[s.name]=(cnt[s.name]||0)+1);const vals=Object.values(cnt);
       if(sol.best.subs.length<3||Math.max(...vals)<2||Math.max(...vals)>4)continue;
       if(Object.keys(cnt).length===1&&cnt.methyl&&o.longAlk&&Math.random()<.7)continue}
     return {m,sol};
   }
 }
+function ringBase(k,orders){
+  const R=1/(2*Math.sin(Math.PI/k)),a0=-Math.PI/2+(k%2?0:Math.PI/k);
+  const atoms=[],bonds=[],ang=[];
+  for(let i=0;i<k;i++){const a=a0+2*Math.PI*i/k;ang.push(a);atoms.push({id:i,x:R*Math.cos(a),y:R*Math.sin(a)})}
+  orders.forEach((b,i)=>bonds.push({a:i,b:(i+1)%k,o:b}));
+  return {atoms,bonds,ang};
+}
+function decorateRing(m,ang,k,ns,pool,X){
+  const atoms=m.atoms,bonds=m.bonds;
+  const add=(x,y,tt)=>{atoms.push({id:atoms.length,x,y,...(tt?{t:tt}:{})});return atoms.length-1};
+  const near=(x,y)=>atoms.some(a=>Math.hypot(a.x-x,a.y-y)<.8);
+  const cnt=Array(k).fill(0),main=pick(pool);
+  for(let s=0;s<ns;s++){
+    const kind=X&&Math.random()<.6?main:pick(pool),L=HALS.includes(kind)?1:{m:1,e:2,p:3,i:1,b:3}[kind];
+    let done=false;
+    for(let tr=0;tr<30&&!done;tr++){
+      const p=ri(0,k-1);
+      if(val(adjOf(m),p)+1>4)continue;
+      const base=ang[p]+(cnt[p]?(Math.random()<.5?.75:-.75):0);
+      const ux=Math.cos(base),uy=Math.sin(base),px=atoms[p].x,py=atoms[p].y;
+      const pts=[];for(let j=1;j<=L;j++)pts.push([px+ux*j,py+uy*j]);
+      const ex=kind==='i'?[.9,-.9].map(r=>[pts[0][0]+Math.cos(base+r),pts[0][1]+Math.sin(base+r)]):[];
+      if([...pts,...ex].some(([x,y])=>near(x,y)))continue;
+      let prev=p;for(const [x,y] of pts){const id=add(x,y,HALS.includes(kind)?kind:null);bonds.push({a:prev,b:id,o:1});prev=id}
+      for(const [x,y] of ex){const id=add(x,y);bonds.push({a:prev,b:id,o:1})}
+      cnt[p]++;done=true;
+    }
+    if(!done)return false;
+  }
+  return true;
+}
 function genRing(level,o){
   const X=level===4;
   for(let t=0;t<2000;t++){
     const k=level===1?pick([4,5,6,6]):pick([3,4,5,5,6,6,6,7]);
-    const R=1/(2*Math.sin(Math.PI/k)),a0=-Math.PI/2+(k%2?0:Math.PI/k);
-    const atoms=[],bonds=[];
-    const add=(x,y)=>{atoms.push({id:atoms.length,x,y});return atoms.length-1};
-    const ang=[];
-    for(let i=0;i<k;i++){const a=a0+2*Math.PI*i/k;ang.push(a);add(R*Math.cos(a),R*Math.sin(a))}
     const orders=Array(k).fill(1);
     if(o.dbl&&level>1&&k>=4&&Math.random()<.55){const i=ri(0,k-1);orders[i]=2;
       if(o.multi&&k>=5&&Math.random()<.4){const j=(i+2+ri(0,k-4))%k;if(Math.abs(j-i)>=2&&Math.abs(j-i)<=k-2)orders[j]=2}}
-    orders.forEach((b,i)=>bonds.push({a:i,b:(i+1)%k,o:b}));
-    const m={atoms,bonds};
+    if(orders.join()==='2,1,2,1,2,1'||orders.join()==='1,2,1,2,1,2')continue;
+    const {atoms,bonds,ang}=ringBase(k,orders),m={atoms,bonds};
     const ns=level===1?ri(1,2):level===2?ri(1,2):X?ri(2,4):ri(2,3);
-    const pool=level===1?['m','m',...(o.longAlk?['e']:[])]:['m','m',...(o.longAlk?['e','e','p']:[]),...(o.iso?['i']:[])];
-    const main=pick(pool);
-    const near=(x,y)=>atoms.some(a=>Math.hypot(a.x-x,a.y-y)<.8);
-    const cnt=Array(k).fill(0);let fail=false;
-    for(let s=0;s<ns&&!fail;s++){
-      const kind=X&&Math.random()<.6?main:pick(pool),L={m:1,e:2,p:3,i:1}[kind];
-      let done=false;
-      for(let tr=0;tr<30&&!done;tr++){
-        const p=ri(0,k-1);
-        if(val(adjOf(m),p)+1>4)continue;
-        const base=ang[p]+(cnt[p]?(Math.random()<.5?.75:-.75):0);
-        const ux=Math.cos(base),uy=Math.sin(base),px=atoms[p].x,py=atoms[p].y;
-        const pts=[];for(let j=1;j<=L;j++)pts.push([px+ux*j,py+uy*j]);
-        const ex=kind==='i'?[.9,-.9].map(r=>{const c=Math.cos(base+r),sn=Math.sin(base+r);return [pts[0][0]+c,pts[0][1]+sn]}):[];
-        if([...pts,...ex].some(([x,y])=>near(x,y)))continue;
-        let prev=p;for(const [x,y] of pts){const id=add(x,y);bonds.push({a:prev,b:id,o:1});prev=id}
-        for(const [x,y] of ex){const id=add(x,y);bonds.push({a:prev,b:id,o:1})}
-        cnt[p]++;done=true;
-      }
-      if(!done)fail=true;
-    }
-    if(fail)continue;
+    if(!decorateRing(m,ang,k,ns,kindPool(level,o,true).filter(x=>x!=='b'),X))continue;
     const sol=solve(m);
-    if(!sol||!sol.ring||!allowed(sol,o))continue;
+    if(!sol||!sol.ring||sol.arom||!allowed(sol,o))continue;
+    return {m,sol};
+  }
+}
+function genBenz(level,o){
+  for(let t=0;t<2000;t++){
+    const {atoms,bonds,ang}=ringBase(6,[2,1,2,1,2,1]),m={atoms,bonds};
+    const ns=level===1?ri(1,2):level===2?ri(1,2):level===3?ri(2,3):ri(2,4);
+    const pool=kindPool(Math.max(level,2),o,true).filter(x=>x!=='b'&&x!=='p');
+    if(!decorateRing(m,ang,6,ns,pool,level===4))continue;
+    const sol=solve(m);
+    if(!sol||!sol.arom||!allowed(sol,o))continue;
     return {m,sol};
   }
 }
@@ -397,11 +486,17 @@ const SETS=[
  {k:'iso',t:'Isopropyl',d:'větev připojená prostředním uhlíkem'},
  {h:'Navíc'},
  {k:'cyclo',t:'Cykly',d:'cykloalkany a cykloalkeny, mezi ostatními příklady'},
- {k:'onlyCyclo',t:'Jen cykly',d:'každý příklad bude cyklický'}
+ {k:'onlyCyclo',t:'Jen cykly',d:'každý příklad bude cyklus nebo benzen'},
+ {k:'arom',t:'Areny',d:'benzen s větvemi, třeba 1,2-dimethylbenzen'},
+ {h:'Deriváty'},
+ {k:'halo',t:'Halogenderiváty',d:'předpony fluor, chlor, brom, jod'},
+ {k:'ol',t:'Alkoholy',d:'skupina -OH, koncovka -ol'},
+ {k:'onal',t:'Aldehydy a ketony',d:'skupina =O, koncovky -al a -on'},
+ {k:'acid',t:'Karboxylové kyseliny',d:'skupina -COOH, kyselina …ová'}
 ];
 let setSnap='';
 function renderSets(){
-  $('#setList').innerHTML=SETS.map(x=>x.h?`<p class="sethead">${x.h}</p>`:`<div class="set"><span>${x.t}<small>${x.d}</small></span><button class="sw" role="switch" data-k="${x.k}" aria-checked="${!!OPT[x.k]}"${(x.k==='multi'&&!OPT.dbl&&!OPT.tri)||(x.k==='onlyCyclo'&&!OPT.cyclo)?' disabled':''} aria-label="${x.t}"></button></div>`).join('');
+  $('#setList').innerHTML=SETS.map(x=>x.h?`<p class="sethead">${x.h}</p>`:`<div class="set"><span>${x.t}<small>${x.d}</small></span><button class="sw" role="switch" data-k="${x.k}" aria-checked="${!!OPT[x.k]}"${(x.k==='multi'&&!OPT.dbl&&!OPT.tri)||(x.k==='onlyCyclo'&&!OPT.cyclo&&!OPT.arom)?' disabled':''} aria-label="${x.t}"></button></div>`).join('');
 }
 function openSets(){setSnap=JSON.stringify(OPT);renderSets();const sh=$('#setSheet');sh.classList.add('show');anim(sh.querySelector('.in'),[{transform:'translateY(100%)'},{transform:'none'}],{duration:240,easing:'cubic-bezier(.3,.8,.3,1)'})}
 function closeSets(){$('#setSheet').classList.remove('show');store.set('nz-opt',OPT);if(JSON.stringify(OPT)!==setSnap)newProblem()}
@@ -414,11 +509,14 @@ const RSTEPS={
  1:{t:'Základ',s:'Ťukni na cyklus.',r:'Když je v molekule cyklus, je základem názvu on. Všechno, co z něj trčí, jsou větve. Kmen dostane předponu cyklo-: cyklohexan, cyklopenten…'},
  2:{t:'Očíslování',s:'Ťukni na uhlík s číslem 1, pak na souseda s číslem 2.',r:'Číslo 1 dostane uhlík dvojné vazby, a pokud žádná není, uhlík s větví. Pak se pokračuje směrem, kterým vyjdou nižší čísla. U cykloalkenu je dvojná vazba vždy mezi 1 a 2, takže se její číslo nepíše. Jediná větev na cyklu se nečísluje.'},
  3:{t:'Název',s:'Ťukni na políčko a vyber, co do něj patří.',r:'Větve abecedně s čísly, pak cyklo + kmen + koncovka. Methylcyklohexan, 1,2-dimethylcyklopentan, 3-methylcyklohexen, cyklohexa-1,3-dien.'}};
-const stepTxt=st=>S.ring&&RSTEPS[st]?RSTEPS[st]:STEPS[st];
+const ASTEPS={1:{t:'Základ',s:'Ťukni na benzenové jádro.',r:'Benzen je šestičlenný kruh se třemi dvojnými vazbami, které se střídají. Když je v molekule, je základem názvu on a všechno ostatní jsou předpony.'},
+ 2:{t:'Očíslování',s:'Ťukni na uhlík s číslem 1, pak na souseda s číslem 2.',r:'V benzenu se dvojné vazby nečíslují. Číslo 1 dostane uhlík s předponou a pokračuje se směrem, kterým vyjdou nejnižší čísla; při shodě rozhoduje abeceda. Jediná předpona se nečísluje: methylbenzen, chlorbenzen.'},
+ 3:{t:'Název',s:'Ťukni na políčko a vyber, co do něj patří.',r:'Předpony abecedně s čísly a pak benzen. Například 1,2-dimethylbenzen nebo 1-brom-4-methylbenzen.'}};
+const stepTxt=st=>S.arom&&ASTEPS[st]?ASTEPS[st]:S.ring&&RSTEPS[st]?RSTEPS[st]:STEPS[st];
 const STEPS=[
  {t:'Doplň vodíky',s:'Ťukni na uhlík a v bublině vyber, jak má vypadat.',r:'Uhlík má vždy čtyři vazby. Vodíků je tolik, kolik vazeb mu zbývá: 4 − vazby k ostatním uhlíkům. Dvojná vazba se počítá za dvě, trojná za tři.'},
- {t:'Hlavní řetězec',s:'Táhni prstem od konce ke konci.',r:'Rozhoduje v tomto pořadí: co nejvíc násobných vazeb, co největší délka, co nejvíc větví. Řetězec může zahýbat a začíná i končí na koncovém uhlíku.'},
- {t:'Očíslování',s:'Ťukni na šipku u konce, odkud se čísluje.',r:'Nejnižší čísla dostanou nejdřív násobné vazby, pak větve (porovnává se číslo po čísle, ne součet), při shodě větev dřív v abecedě. Mezi dvojnou a trojnou vazbou vyhrává dvojná.'},
+ {t:'Hlavní řetězec',s:'Táhni prstem od konce ke konci.',r:'Rozhoduje v tomto pořadí: všechny uhlíky se skupinou (-OH, =O, -COOH), co nejvíc násobných vazeb, co největší délka, co nejvíc větví. Řetězec může zahýbat a začíná i končí na koncovém uhlíku.'},
+ {t:'Očíslování',s:'Ťukni na šipku u konce, odkud se čísluje.',r:'Nejnižší čísla dostanou nejdřív uhlíky se skupinou (-OH, =O, -COOH), pak násobné vazby, pak větve (porovnává se číslo po čísle, ne součet), při shodě větev dřív v abecedě. Mezi dvojnou a trojnou vazbou vyhrává dvojná.'},
  {t:'Název',s:'Ťukni na políčko a vyber, co do něj patří.',r:'Větve abecedně (di-, tri-, tetra- se nepočítá, isopropyl patří pod i) s čísly, pak kmen, -a- jen před di-/tri- v koncovce, čísla násobných vazeb a koncovka. Například 3-ethyl-2-methylhexa-1,4-dien.'}
 ];
 
@@ -459,9 +557,9 @@ function updateBonds(){
 function build(animate){
   layout();
   bondG.textContent='';atomL.textContent='';ATOM={};LINES=[];
-  M.atoms.forEach(a=>{const e=document.createElement('button');e.className='atom';e.dataset.id=a.id;e.setAttribute('aria-label','uhlík');
+  M.atoms.forEach(a=>{const e=document.createElement('button');e.className='atom'+(a.t?' het':'');e.dataset.id=a.id;e.setAttribute('aria-label',a.t||'uhlík');
     e.style.left=POS[a.id].x+'px';e.style.top=POS[a.id].y+'px';e.style.fontSize=FS+'px';
-    e.innerHTML='<span class="c">C</span><span class="slot"></span>';atomL.appendChild(e);ATOM[a.id]=e});
+    e.innerHTML=`<span class="c">${a.t||'C'}</span><span class="slot"></span>`;atomL.appendChild(e);ATOM[a.id]=e});
   M.atoms.forEach(a=>paintSlot(a.id));
   const NS='http://www.w3.org/2000/svg';
   M.bonds.forEach(b=>{const offs=b.o===1?[0]:b.o===2?[-3,3]:[-4.6,0,4.6];
@@ -484,8 +582,10 @@ function drawIn(){
   const pop=$('#hpop'),ld=$('#leader'),t=maxD*step+260;
   [pop,ld].forEach(el=>anim(el,[{opacity:0},{opacity:0,offset:.6},{opacity:1}],{duration:t+200}));
 }
+const isCarb=id=>!M.atoms[id].t;
 function paintSlot(id,fresh){
   const s=ATOM[id].querySelector('.slot'),h=S.h[id];
+  if(!isCarb(id)){s.className='slot';s.innerHTML='';return}
   if(S.step===0&&!S.ok){
     s.className='slot'+(h==null?' empty':'')+(h===0?' none':'')+(S.sel===id?' sel':'')+(S.bad.has(id)?' bad':'');
     s.innerHTML=h==null?'H<sub>?</sub>':HTXT[h];
@@ -522,7 +622,15 @@ function paintHL(){
   const shp=S.ring&&P.length===S.ring.length?ringShapes:chainShapes;
   hlG.innerHTML=mark?shp(P,3,'var(--hl)'):shp(P,6.4,'var(--frame)')+shp(P,5,'var(--paper)');
 }
-function numPos(id){const p=POS[id];if(S.ring&&S.ring.includes(id)){const c=ringCenter(),dx=c.x-p.x,dy=c.y-p.y,L=Math.hypot(dx,dy)||1,d=Math.min(FS*1.05,L*.55);return {x:p.x+dx/L*d,y:p.y+dy/L*d}}return {x:p.x-FS*.72,y:p.y-FS*1.12}}
+function segDist(px,py,a,b){const dx=b.x-a.x,dy=b.y-a.y,L=dx*dx+dy*dy||1;let t=((px-a.x)*dx+(py-a.y)*dy)/L;t=Math.max(0,Math.min(1,t));return Math.hypot(px-a.x-t*dx,py-a.y-t*dy)}
+function numPos(id){const p=POS[id];if(S.ring&&S.ring.includes(id)){const c=ringCenter(),dx=c.x-p.x,dy=c.y-p.y,L=Math.hypot(dx,dy)||1,d=Math.min(FS*1.05,L*.55);return {x:p.x+dx/L*d,y:p.y+dy/L*d}}
+  const C=[[-.75,-1.1],[.75,-1.1],[-.75,1.15],[.75,1.15],[-1.3,0]];let best=null,bs=-1;
+  for(const [cx,cy] of C){const x=p.x+cx*FS,y=p.y+cy*FS;let sc=1e9;
+    for(const b of M.bonds)sc=Math.min(sc,segDist(x,y,POS[b.a],POS[b.b]));
+    for(const a of M.atoms)if(a.id!==id)sc=Math.min(sc,Math.hypot(x-POS[a.id].x,y-POS[a.id].y)-FS*.55);
+    if(sc>=FS*.6)return {x,y};
+    if(sc>bs+.5){bs=sc;best={x,y}}}
+  return best}
 function numEl(id,n,bad,faint){const p=numPos(id);return `<span class="num${bad?' bad':''}" style="left:${p.x}px;top:${p.y}px;font-size:${Math.max(13,FS*.55)}px${faint?';opacity:.4':''}">${n}</span>`}
 function arrowEl(end,nb){
   const p=POS[end],q=POS[nb],b=boxOf(end),len=Math.max(28,FS*1.45),up=q.y<p.y-1;
@@ -578,7 +686,7 @@ function paintFoot(){
   pri.classList.toggle('ok',S.ok);pri.classList.remove('hide');
   if(S.ok){pri.textContent=S.final?'Další příklad':'Pokračovat';pri.disabled=false}
   else{pri.textContent='Zkontrolovat';
-    if(S.step===0)pri.disabled=M.atoms.some(a=>S.h[a.id]==null);
+    if(S.step===0)pri.disabled=M.atoms.some(a=>!a.t&&S.h[a.id]==null);
     if(S.step===1){pri.disabled=S.path.length<2;if(S.ring)pri.classList.add('hide')}
     if(S.step===2)pri.classList.add('hide');
     if(S.step===3)pri.disabled=!nmString()}
@@ -607,21 +715,21 @@ function hush(){$('#msg').classList.remove('show');hideFb()}
 function newProblem(){
   closePick();
   const g=generate(S.level,OPT)||generate(1,OPT)||generate(1);M=g.m;SOL=g.sol;ADJ=SOL.adj;
-  ORDER=[...M.atoms].sort((a,b)=>a.y-b.y||a.x-b.x).map(a=>a.id);
-  Object.assign(S,{step:0,ok:false,final:false,h:{},sel:ORDER[0],bad:new Set(),path:[],dir:null,lock:false,nm:null,badF:new Set(),helped:false,ring:SOL.ring||null,r1:null});
-  if(!OPT.hyd){M.atoms.forEach(a=>S.h[a.id]=4-val(ADJ,a.id));S.sel=null;S.step=1}
+  ORDER=M.atoms.filter(a=>!a.t).sort((a,b)=>a.y-b.y||a.x-b.x).map(a=>a.id);
+  Object.assign(S,{step:0,ok:false,final:false,h:{},sel:ORDER[0],bad:new Set(),path:[],dir:null,lock:false,nm:null,badF:new Set(),helped:false,ring:SOL.ring||null,arom:!!SOL.arom,r1:null});
+  if(!OPT.hyd){M.atoms.forEach(a=>{if(!a.t)S.h[a.id]=4-val(ADJ,a.id)});S.sel=null;S.step=1}
   hush();paintHead();build(true);paintFoot();
 }
 function solved(t,m){S.ok=true;say('ok',t,m);paintHead();placePop()}
 function next(){
   if(S.final)return newProblem();
   S.step++;S.ok=false;hush();closePick();
-  if(S.step===3){S.nm={subs:[{locs:[],mult:'',alk:''}],stem:'',bonds:[{locs:[],mult:'',end:''}]};renderName()}
+  if(S.step===3){S.nm={subs:[{locs:[],mult:'',alk:''}],stem:'',bonds:[{locs:[],mult:'',end:''}],grp:{locs:[],mult:'',suf:''}};renderName()}
   paintHead();build(false);paintFoot();
 }
 
 /* krok 0 */
-function chooseAtom(id){if(S.sel===id)return;const old=S.sel;S.sel=id;if(old!=null)paintSlot(old);paintSlot(id);updateBonds();paintFoot()}
+function chooseAtom(id){if(!isCarb(id)||S.sel===id)return;const old=S.sel;S.sel=id;if(old!=null)paintSlot(old);paintSlot(id);updateBonds();paintFoot()}
 function setH(v){
   const id=S.sel;if(id==null)return;
   S.h[id]=v;S.bad.delete(id);hush();
@@ -630,7 +738,7 @@ function setH(v){
   S.sel=nx;paintSlot(id,true);if(nx!=null)paintSlot(nx);updateBonds();paintFoot();
 }
 function checkH(){
-  const wrong=M.atoms.filter(a=>S.h[a.id]!==4-val(ADJ,a.id)).map(a=>a.id);
+  const wrong=M.atoms.filter(a=>!a.t&&S.h[a.id]!==4-val(ADJ,a.id)).map(a=>a.id);
   if(!wrong.length){S.sel=null;S.ok=true;M.atoms.forEach(a=>paintSlot(a.id));updateBonds();solved('Sedí.','Každý uhlík má teď čtyři vazby.');return}
   S.bad=new Set(wrong);S.sel=wrong[0];M.atoms.forEach(a=>paintSlot(a.id));updateBonds();
   wrong.forEach(id=>{const s=ATOM[id].querySelector('.slot');s.classList.remove('shake');void s.offsetWidth;s.classList.add('shake')});
@@ -641,6 +749,7 @@ function checkH(){
 const isAdj=(a,b)=>ADJ[a].some(e=>e.to===b);
 let chainDrag=false,raf=0,lastPt=null;
 function chainTap(id){
+  if(!isCarb(id)){say('hint','','Do řetězce patří jen uhlíky.');return}
   const p=S.path,last=p[p.length-1];
   if(p.length&&id===last)return;
   if(p.length>1&&id===p[p.length-2])p.pop();
@@ -652,7 +761,7 @@ function chainTap(id){
 function chainMove(){
   raf=0;if(!lastPt)return;
   const e=document.elementFromPoint(lastPt.x,lastPt.y),a=e&&e.closest('.atom');if(!a)return;
-  const id=+a.dataset.id,p=S.path,last=p[p.length-1];if(id===last)return;
+  const id=+a.dataset.id,p=S.path,last=p[p.length-1];if(id===last||!isCarb(id))return;
   if(p.length>1&&id===p[p.length-2]){p.pop();paintHL()}
   else if(!p.includes(id)&&isAdj(last,id)){p.push(id);paintHL()}
 }
@@ -661,7 +770,7 @@ function checkChain(){
   if(mine.valid&&buildName(mine).str===SOL.name){S.ok=true;paintHL();anim(hlG,[{opacity:0},{opacity:1}],{duration:320});solved('Sedí.',`Hlavní řetězec má ${P.length} uhlíků.`);return}
   let m;
   if(!leaf(P[0])||!leaf(P[P.length-1]))m='Řetězec musí začínat i končit na koncovém uhlíku, ze kterého vede jen jedna vazba.';
-  else{const [i]=stageCmp(mine,SOL.best);m=i===0?'Hlavní řetězec musí obsahovat co nejvíc násobných vazeb.':i===1?'Existuje delší řetězec. Může zahýbat přes větvení.':i===2?'Stejně dlouhých je víc: vyber ten s víc větvemi.':'Existuje jiný stejně dlouhý řetězec, u kterého vyjdou nižší čísla.'}
+  else{const [i]=stageCmp(mine,SOL.best);m=i===0?'Hlavní řetězec musí obsahovat uhlíky se skupinou (-OH, =O, -COOH), a to všechny.':i===1?'Hlavní řetězec musí obsahovat co nejvíc násobných vazeb.':i===2?'Existuje delší řetězec. Může zahýbat přes větvení.':i===3?'Stejně dlouhých je víc: vyber ten s víc větvemi.':'Existuje jiný stejně dlouhý řetězec, u kterého vyjdou nižší čísla.'}
   for(const id of P){const e=ATOM[id];e.classList.remove('shake');void e.offsetWidth;e.classList.add('shake')}
   say('bad','Ještě ne.',m);
 }
@@ -669,9 +778,9 @@ function checkChain(){
 /* cyklus */
 function ringTap(id){
   if(S.ok)return;
-  if(!S.ring.includes(id)){say('hint','','Tohle je větev. Základem je cyklus.');return}
+  if(!S.ring.includes(id)){say('hint','',S.arom?'Tohle je větev. Základem je benzenové jádro.':'Tohle je větev. Základem je cyklus.');return}
   S.path=[...S.ring];S.ok=true;paintHL();anim(hlG,[{opacity:0},{opacity:1}],{duration:320});
-  solved('Sedí.',`Základem je cyklus se ${S.ring.length} uhlíky.`);
+  solved('Sedí.',S.arom?'Základem je benzen.':`Základem je cyklus se ${S.ring.length} uhlíky.`);
 }
 function ringNumTap(id,byHelp){
   if(S.ok||S.lock)return;
@@ -691,7 +800,7 @@ function ringNumTap(id,byHelp){
     paintNums(false,dir,true);[...numL.children].forEach(e=>e.classList.add('shake'));
     const fade=()=>{if(tok!==numTok)return;S.lock=false;S.r1=null;paintNums(false);paintFoot()};
     const has1=mine.mb.includes(1)||mine.subs.some(s=>s.loc===1);
-    say('bad','Jinak.',st===3||st===4?'Číslo 1 a 2 musí dostat uhlíky dvojné vazby.':!has1?'Číslo 1 dostane uhlík s větví.':st===5?'Z jedničky pokračuj směrem, kterým vyjdou nižší čísla větví. Porovnávej číslo po čísle.':'Z obou stran vychází stejně, rozhoduje abeceda: nižší číslo dostane větev dřív v abecedě.',fade);
+    say('bad','Jinak.',st===5||st===6?'Číslo 1 a 2 musí dostat uhlíky dvojné vazby.':!has1?'Číslo 1 dostane uhlík s větví.':st===7?'Z jedničky pokračuj směrem, kterým vyjdou nižší čísla větví. Porovnávej číslo po čísle.':'Z obou stran vychází stejně, rozhoduje abeceda: nižší číslo dostane větev dřív v abecedě.',fade);
   },wait);
 }
 
@@ -713,31 +822,34 @@ function numberFrom(id,byHelp){
     [...numL.children].forEach(e=>e.classList.add('shake'));
     const fade=()=>{if(tok!==numTok)return;const kids=[...numL.children];let n=kids.length;if(!n||RM.matches){S.lock=false;paintNums(false);paintFoot();return}
       kids.forEach(e=>{const an=e.animate([{opacity:1},{opacity:0}],{duration:220,fill:'forwards'});an.onfinish=()=>{if(--n===0&&tok===numTok){S.lock=false;paintNums(false);paintFoot()}}})};
-    say('bad','Z druhé strany.',i===3?'Násobné vazby musí dostat co nejnižší čísla.':i===4?'Vazby vycházejí stejně, nižší číslo pak dostane dvojná vazba.':i===5?'Větve musí dostat co nejnižší čísla. Porovnávej číslo po čísle, ne součet.':'Z obou stran vychází stejně, rozhoduje abeceda: nižší číslo dostane větev dřív v abecedě.',fade);
+    say('bad','Z druhé strany.',i===4?'Nejnižší číslo musí dostat uhlík se skupinou (-OH, =O, -COOH). Ta má přednost před vazbami i větvemi.':i===5?'Násobné vazby musí dostat co nejnižší čísla.':i===6?'Vazby vycházejí stejně, nižší číslo pak dostane dvojná vazba.':i===7?'Větve musí dostat co nejnižší čísla. Porovnávej číslo po čísle, ne součet.':'Z obou stran vychází stejně, rozhoduje abeceda: nižší číslo dostane větev dřív v abecedě.',fade);
   },wait);
 }
-function numMsg(c){const p=[];if(c.mb.length)p.push('násobné vazby '+c.mb.join(', '));if(c.subs.length)p.push('větve '+c.sl.join(', '));return p.length?p.join(', ').replace(/^./,x=>x.toUpperCase())+'.':''}
+function numMsg(c){const p=[];if(c.pl&&c.pl.length)p.push('skupina '+c.pl.join(', '));if(c.mb.length)p.push('násobné vazby '+c.mb.join(', '));if(c.subs.length)p.push('větve '+c.sl.join(', '));return p.length?p.join(', ').replace(/^./,x=>x.toUpperCase())+'.':''}
 
 /* krok 3: název z políček */
 const nameEl=$('#nameArea');
 function nmString(){
   const n=S.nm;if(!n)return'';
-  let out='';
+  let out=n.grp&&n.grp.suf==='ová'?'kyselina ':'';
   n.subs.filter(g=>g.alk).forEach((g,i)=>{const l=g.locs.join(',');out+=(i?'-':'')+(l?l+'-':'')+g.mult+g.alk});
   out+=n.stem;
-  n.bonds.filter(b=>b.end).forEach(b=>{const l=b.locs.join(',');out+=(l?'-'+l+'-':'')+b.mult+b.end});
-  return out;
+  if(n.stem!=='benzen')n.bonds.filter(b=>b.end).forEach(b=>{const l=b.locs.join(',');out+=(l?'-'+l+'-':'')+b.mult+b.end});
+  if(n.grp&&n.grp.suf){const g=n.grp,l=g.locs.join(',');out+=(l?'-'+l+'-':'')+g.mult+g.suf}
+  return out==='kyselina '?'':out;
 }
 function fieldBtn(key,val,ph,dis){const bad=S.badF.has(key)?' bad':'',open=PK&&PK.key===key?' open':'';
   return `<button class="f${val?'':' empty'}${bad}${open}" data-f="${key}"${dis?' disabled':''}>${val?esc(val):ph}</button>`}
 function renderName(){
   const n=S.nm;if(!n){nameEl.innerHTML='';return}
-  let h='<div class="nrow"><small>větve</small>';
+  const hasG=OPT.ol||OPT.onal||OPT.acid,bz=n.stem==='benzen';
+  let h=`<div class="nrow"><small>${OPT.halo?'větve a předpony':'větve'}</small>`;
   n.subs.forEach((g,i)=>{h+=`<span class="grp">${fieldBtn('s'+i+'.locs',g.locs.join(','),'čísla')}<span class="dash">-</span>${fieldBtn('s'+i+'.mult',g.mult,'di/tri?')}${fieldBtn('s'+i+'.alk',g.alk,'větev')}</span>`});
   h+=`<button class="plus" data-add="s">+ větev</button></div><div class="nrow"><small>${S.ring?'základ':'hlavní řetězec'}</small>`;
   h+=`<span class="grp">${fieldBtn('stem',n.stem,'kmen')}</span>`;
-  n.bonds.forEach((b,i)=>{const an=b.end==='an';h+=`<span class="grp"><span class="dash">-</span>${fieldBtn('b'+i+'.locs',b.locs.join(','),'čísla',an)}<span class="dash">-</span>${fieldBtn('b'+i+'.mult',b.mult,'di/tri?',an)}${fieldBtn('b'+i+'.end',b.end,'koncovka')}</span>`});
-  if(n.bonds.length<2)h+='<button class="plus" data-add="b">+ vazba</button>';
+  n.bonds.forEach((b,i)=>{const an=b.end==='an'||bz;h+=`<span class="grp"><span class="dash">-</span>${fieldBtn('b'+i+'.locs',b.locs.join(','),'čísla',an)}<span class="dash">-</span>${fieldBtn('b'+i+'.mult',b.mult,'di/tri?',an)}${fieldBtn('b'+i+'.end',b.end,'koncovka',bz)}</span>`});
+  if(n.bonds.length<2&&!bz)h+='<button class="plus" data-add="b">+ vazba</button>';
+  if(hasG){const g=n.grp,nl=g.suf==='al'||g.suf==='ová';h+=`</div><div class="nrow"><small>skupina (přípona)</small><span class="grp"><span class="dash">-</span>${fieldBtn('g.locs',g.locs.join(','),'čísla',nl||bz)}<span class="dash">-</span>${fieldBtn('g.mult',g.mult,'di/tri?',nl||bz)}${fieldBtn('g.suf',g.suf,'přípona',bz)}</span>`}
   const str=nmString();
   h+=`</div><div class="preview${str?'':' empty'}" aria-live="polite">${str?esc(str):'tady se poskládá název'}</div>`;
   nameEl.innerHTML=h;paintFoot();
@@ -746,18 +858,19 @@ let PK=null;
 const PICK={
   locs:{t:'Čísla',multi:true,cols:6,opts:[1,2,3,4,5,6,7,8,9,10,11,12].map(String)},
   mult:{t:'Násobná předpona',cols:4,opts:['','di','tri','tetra'],lab:{'':'žádná'}},
-  alk:{t:'Větev',cols:2,opts:['methyl','ethyl','propyl','isopropyl','butyl']},
-  stem:{t:'Kmen',cols:4,opts:STEMS.slice(1).flatMap(s=>[s,s+'a'])},
-  end:{t:'Koncovka',cols:3,opts:['an','en','yn']}
+  alk:{t:'Větev nebo předpona',cols:2,optsF:()=>['methyl','ethyl','propyl','isopropyl','butyl',...(OPT.halo?['fluor','chlor','brom','jod']:[])]},
+  stem:{t:'Kmen',cols:4,optsF:()=>[...STEMS.slice(1).flatMap(s=>[s,s+'a']),...(OPT.arom?['benzen']:[])]},
+  end:{t:'Koncovka',cols:3,opts:['an','en','yn']},
+  suf:{t:'Přípona podle skupiny',cols:2,optsF:()=>[...(OPT.ol?['ol']:[]),...(OPT.onal?['on','al']:[]),...(OPT.acid?['ová']:[])],lab:{ol:'-ol (alkohol)',on:'-on (keton)',al:'-al (aldehyd)','ová':'kyselina …ová'}}
 };
-function getF(key){const n=S.nm;if(key==='stem')return{obj:n,prop:'stem',kind:'stem'};const [g,prop]=key.split('.'),arr=g[0]==='s'?n.subs:n.bonds;return{obj:arr[+g.slice(1)],prop,kind:prop,arr,idx:+g.slice(1),grp:g[0]}}
+function getF(key){const n=S.nm;if(key==='stem')return{obj:n,prop:'stem',kind:'stem'};if(key.startsWith('g.'))return{obj:n.grp,prop:key.slice(2),kind:key.slice(2)};const [g,prop]=key.split('.'),arr=g[0]==='s'?n.subs:n.bonds;return{obj:arr[+g.slice(1)],prop,kind:prop,arr,idx:+g.slice(1),grp:g[0]}}
 function openPick(key){
   const f=getF(key),P=PICK[f.kind];PK={key,...f};
   const cur=f.obj[f.prop];
   $('#pickT').textContent=P.t;
   const O=$('#pickO');O.style.gridTemplateColumns=`repeat(${P.cols},1fr)`;
   const cyc=f.kind==='stem'&&!!S.nm.cyc;
-  O.innerHTML=(f.kind==='stem'?`<button class="tog" data-cyc="1" aria-pressed="${cyc}">předpona cyklo- ${cyc?'zapnutá':'vypnutá'}</button>`:'')+P.opts.map(o=>{const on=P.multi?false:f.kind==='stem'?cur===(cyc?'cyklo':'')+o:cur===o;return `<button data-o="${o}" aria-pressed="${on}">${esc(P.lab&&P.lab[o]!=null?P.lab[o]:o)}</button>`}).join('')+(P.multi?'<button class="wide" data-back="1">smazat poslední číslo</button>':'');
+  O.innerHTML=(f.kind==='stem'?`<button class="tog" data-cyc="1" aria-pressed="${cyc}">předpona cyklo- ${cyc?'zapnutá':'vypnutá'}</button>`:'')+(P.optsF?P.optsF():P.opts).map(o=>{const on=P.multi?false:f.kind==='stem'?cur===(cyc?'cyklo':'')+o:cur===o;return `<button data-o="${o}" aria-pressed="${on}">${esc(P.lab&&P.lab[o]!=null?P.lab[o]:o)}</button>`}).join('')+(P.multi?'<button class="wide" data-back="1">smazat poslední číslo</button>':'');
   pickTitle();
   const canDel=(f.grp==='s'&&f.kind==='alk')||(f.grp==='b'&&f.kind==='end'&&S.nm.bonds.length>1);
   $('#pickDel').classList.toggle('hide',!canDel);$('#pickDel').textContent=f.grp==='s'?'odebrat větev':'odebrat vazbu';
@@ -774,7 +887,7 @@ $('#pickO').addEventListener('click',e=>{if(!PK)return;
   const b=e.target.closest('button[data-o]');if(!b)return;const P=PICK[PK.kind],o=b.dataset.o;
   S.badF.delete(PK.key);hush();
   if(P.multi){const arr=PK.obj[PK.prop];if(arr.length<4){arr.push(+o);arr.sort((a,c)=>a-c)}anim(b,[{transform:'scale(.92)'},{transform:'none'}],{duration:160});pickTitle();renderName()}
-  else{PK.obj[PK.prop]=PK.kind==='stem'&&S.nm.cyc?'cyklo'+o:o;if(PK.kind==='end'&&o==='an'){PK.obj.locs=[];PK.obj.mult=''}closePick()}});
+  else{PK.obj[PK.prop]=PK.kind==='stem'&&S.nm.cyc&&o!=='benzen'?'cyklo'+o:o;if(PK.kind==='suf'&&(o==='al'||o==='ová')){PK.obj.locs=[];PK.obj.mult=''}if(PK.kind==='end'&&o==='an'){PK.obj.locs=[];PK.obj.mult=''}closePick()}});
 $('#pickOk').addEventListener('click',closePick);
 $('#pickDel').addEventListener('click',()=>{if(!PK)return;PK.arr.splice(PK.idx,1);S.badF.clear();closePick()});
 nameEl.addEventListener('click',e=>{
@@ -783,9 +896,13 @@ nameEl.addEventListener('click',e=>{
   const p=e.target.closest('.plus');if(p){hush();if(p.dataset.add==='s')S.nm.subs.push({locs:[],mult:'',alk:''});else S.nm.bonds.push({locs:[],mult:'',end:''});S.badF.clear();renderName()}
 });
 function target(){
-  const T={subs:[],stem:'',bonds:[]};let cur=null,after=false;
+  const T={subs:[],stem:'',bonds:[],grp:{locs:[],mult:'',suf:''}};let cur=null,after=false;
   const locs=t=>t.replace(/-/g,'').split(',').filter(Boolean).map(Number);
   for(const tk of SOL.tokens){
+    if(tk.k==='kys')continue;
+    if(tk.k==='sloc'){T.grp.locs=locs(tk.t);continue}
+    if(tk.k==='smult'){T.grp.mult=tk.t;continue}
+    if(tk.k==='suf'){T.grp.suf=tk.t;continue}
     if(tk.k==='stem'){T.stem=tk.t;after=true;cur=null;continue}
     if(!after){
       if(tk.k==='loc'){cur={locs:locs(tk.t),mult:'',alk:''};T.subs.push(cur)}
@@ -806,7 +923,7 @@ function checkName(){
   const T=target(),n=S.nm,bad=new Set();let m='';
   const us=n.subs.map((g,i)=>({...g,i})).filter(g=>g.alk);
   n.subs.forEach((g,i)=>{if(!g.alk)bad.add('s'+i+'.alk')});
-  n.bonds.forEach((b,i)=>{if(!b.end)bad.add('b'+i+'.end')});
+  if(n.stem!=='benzen')n.bonds.forEach((b,i)=>{if(!b.end)bad.add('b'+i+'.end')});
   if(!n.stem)bad.add('stem');
   if(bad.size)m='Ještě nemáš vyplněná všechna políčka.';
   const names=us.map(g=>g.alk),tn=T.subs.map(g=>g.alk);
@@ -814,13 +931,18 @@ function checkName(){
   if(!m&&names.join()!==tn.join()){us.forEach(g=>bad.add('s'+g.i+'.alk'));m='Větve se řadí abecedně, di- a tri- se do abecedy nepočítají.'}
   if(!m){us.forEach(g=>{const tg=T.subs.find(x=>x.alk===g.alk);if(g.locs.join()!==tg.locs.join())bad.add('s'+g.i+'.locs')});if(bad.size)m=T.subs.length===1&&!T.subs[0].locs.length?'Jediná větev na cyklu se nečísluje, políčko s čísly nech prázdné.':'Čísla u větví nesedí s tvým číslováním. Každá větev musí mít svoje číslo.'}
   if(!m){us.forEach(g=>{const tg=T.subs.find(x=>x.alk===g.alk);if(g.mult!==tg.mult)bad.add('s'+g.i+'.mult')});if(bad.size)m='Předpona u větve musí odpovídat počtu čísel: dvě čísla = di, tři = tri, čtyři = tetra.'}
+  if(!m&&(n.stem==='benzen')!==(T.stem==='benzen')){bad.add('stem');m=T.stem==='benzen'?'Šestičlenný kruh se třemi střídavými dvojnými vazbami je benzen.':'Tohle není benzen.'}
   if(!m&&/^cyklo/.test(n.stem)!==/^cyklo/.test(T.stem)){bad.add('stem');m=S.ring?'Základem je cyklus, kmen potřebuje předponu cyklo- (zapneš ji v nabídce kmene).':'Tady žádný cyklus není, předponu cyklo- vypni.'}
   if(!m&&n.stem.replace(/a$/,'')!==T.stem.replace(/a$/,'')){bad.add('stem');m=`Kmen se řídí počtem uhlíků ${S.ring?'v cyklu':'hlavního řetězce'}, tady ${SOL.best.len}.`}
   if(!m&&n.stem!==T.stem){bad.add('stem');m='Pozor na -a-: ke kmeni se přidává jen před di-, tri- v koncovce (buta-1,3-dien).'}
-  const ub=n.bonds.map((b,i)=>({...b,i})).filter(b=>b.end);
+  const ub=n.stem==='benzen'?[]:n.bonds.map((b,i)=>({...b,i})).filter(b=>b.end);
   if(!m&&ub.map(b=>b.end).join()!==T.bonds.map(b=>b.end).join()){ub.forEach(b=>bad.add('b'+b.i+'.end'));m=T.bonds.length===2?'Jsou tu dvojné i trojné vazby: koncovka -en a pak -yn.':'Koncovka podle vazeb: -an jen jednoduché, -en dvojná, -yn trojná.'}
   if(!m){ub.forEach((b,k)=>{if(b.locs.join()!==T.bonds[k].locs.join())bad.add('b'+b.i+'.locs')});if(bad.size)m=T.bonds[0].locs.length?'Čísla násobných vazeb nesedí. Píše se nižší číslo z obou uhlíků vazby.':S.ring?'U cykloalkenu s jednou dvojnou vazbou se její číslo nepíše, je vždy 1.':'U ethenu a propenu se číslo nepíše.'}
   if(!m){ub.forEach((b,k)=>{if(b.mult!==T.bonds[k].mult)bad.add('b'+b.i+'.mult')});if(bad.size)m='Předpona u koncovky musí odpovídat počtu vazeb: dvě dvojné = dien.'}
+  const ug=n.grp||{locs:[],mult:'',suf:''},tg=T.grp;
+  if(!m&&ug.suf!==tg.suf){bad.add('g.suf');m=!tg.suf?'Tahle látka žádnou skupinu -OH, =O ani -COOH nemá, přípona zůstane prázdná.':'Přípona podle skupiny: -OH = -ol, =O uprostřed řetězce = -on, =O na konci (CHO) = -al, -COOH = kyselina …ová.'}
+  if(!m&&ug.locs.join()!==tg.locs.join()){bad.add('g.locs');m=!tg.locs.length?(tg.suf==='ol'?'U ethanolu a methanolu se číslo nepíše.':'U -al a kyseliny se číslo nepíše, skupina je vždy na uhlíku 1.'):'Číslo u přípony nesedí. Skupina má mít co nejnižší číslo.'}
+  if(!m&&ug.mult!==tg.mult){bad.add('g.mult');m='Předpona musí odpovídat počtu skupin: dvě -OH = diol, tři = triol, dvě =O = dion.'}
   if(!m)m='Něco v zápisu nesedí. Zkontroluj pořadí a spojovníky.';
   S.badF=bad;renderName();
   nameEl.querySelectorAll('.f.bad').forEach(e=>e.classList.add('shake'));
@@ -838,12 +960,12 @@ function finish(){
 /* nevím */
 function help(){
   S.helped=true;hideFb();
-  if(S.step===0){M.atoms.forEach(a=>{S.h[a.id]=4-val(ADJ,a.id)});S.bad.clear();S.sel=null;S.ok=true;M.atoms.forEach(a=>paintSlot(a.id,true));updateBonds();solved('Takhle to vychází.','Vodíků je vždy 4 minus počet vazeb k uhlíkům.');return}
+  if(S.step===0){M.atoms.forEach(a=>{if(!a.t)S.h[a.id]=4-val(ADJ,a.id)});S.bad.clear();S.sel=null;S.ok=true;M.atoms.forEach(a=>paintSlot(a.id,true));updateBonds();solved('Takhle to vychází.','Vodíků je vždy 4 minus počet vazeb k uhlíkům.');return}
   if(S.step===1&&S.ring){S.path=[...S.ring];S.ok=true;paintHL();solved('Základem je cyklus.',`Má ${S.ring.length} uhlíků.`);return}
   if(S.step===1){S.path=[...SOL.best.P];S.ok=true;paintHL();solved('Tudy vede hlavní řetězec.',`Má ${S.path.length} uhlíků.`);return}
   if(S.step===2&&S.ring){numTok++;S.lock=false;S.dir=null;S.r1=SOL.best.P[0];ringNumTap(SOL.best.P[1],true);return}
   if(S.step===2){numTok++;S.lock=false;S.dir=null;const d=bestDir(ADJ,S.path).P;numberFrom(d[0],true);return}
-  if(S.step===3){closePick();const T=target();S.nm={subs:T.subs.map(g=>({...g,locs:[...g.locs]})),stem:T.stem,cyc:/^cyklo/.test(T.stem),bonds:T.bonds.map(b=>({...b,locs:[...b.locs]}))};finish()}
+  if(S.step===3){closePick();const T=target();S.nm={subs:T.subs.map(g=>({...g,locs:[...g.locs]})),stem:T.stem,cyc:/^cyklo/.test(T.stem),bonds:T.bonds.length?T.bonds.map(b=>({...b,locs:[...b.locs]})):[{locs:[],mult:'',end:''}],grp:{...T.grp,locs:[...T.grp.locs]}};finish()}
 }
 
 /* ---------- události ---------- */
@@ -864,12 +986,12 @@ board.addEventListener('click',e=>{
 });
 $('#hpop').addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(b)setH(+b.dataset.v)});
 $('#pri').addEventListener('click',()=>{if(S.ok)return next();[checkH,checkChain,null,checkName][S.step]?.()});
-$('#clr').addEventListener('click',()=>{hush();if(S.step===1){S.path=[];paintHL()}if(S.step===3){S.nm={subs:[{locs:[],mult:'',alk:''}],stem:'',bonds:[{locs:[],mult:'',end:''}]};S.badF.clear();renderName()}paintFoot()});
+$('#clr').addEventListener('click',()=>{hush();if(S.step===1){S.path=[];paintHL()}if(S.step===3){S.nm={subs:[{locs:[],mult:'',alk:''}],stem:'',bonds:[{locs:[],mult:'',end:''}],grp:{locs:[],mult:'',suf:''}};S.badF.clear();renderName()}paintFoot()});
 $('#help').addEventListener('click',help);
 $('#setBtn').addEventListener('click',openSets);
 $('#setOk').addEventListener('click',closeSets);
 $('#setReset').addEventListener('click',()=>{OPT=Object.assign({},OPTDEF);renderSets()});
-$('#setList').addEventListener('click',e=>{const b=e.target.closest('.sw');if(!b||b.disabled)return;const k=b.dataset.k;OPT[k]=!OPT[k];if(k==='cyclo'&&!OPT.cyclo)OPT.onlyCyclo=false;renderSets()});
+$('#setList').addEventListener('click',e=>{const b=e.target.closest('.sw');if(!b||b.disabled)return;const k=b.dataset.k;OPT[k]=!OPT[k];if(!OPT.cyclo&&!OPT.arom)OPT.onlyCyclo=false;renderSets()});
 $('#fbHelp').addEventListener('click',help);
 $('#fbBtn').addEventListener('click',()=>{if(S.ok){hideFb();return next()}const a=fbAfter;fbAfter=null;hideFb();a&&a()});
 $('#ruleBtn').addEventListener('click',()=>{const o=$('#ruleText').classList.toggle('open');$('#ruleBtn').setAttribute('aria-expanded',o);build(false);paintFoot()});
