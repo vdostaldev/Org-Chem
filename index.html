@@ -529,13 +529,21 @@ const STEPS=[
 const stage=$('#stage'),board=$('#board'),bondG=$('#bondG'),hlG=$('#hlG'),atomL=$('#atomL'),numL=$('#numL');
 const popOn=()=>S.step===0&&!S.ok&&S.sel!=null;
 function layout(){
+  const top=stage.getBoundingClientRect().top+scrollY,footH=$('footer').offsetHeight;
+  const extra=S.step===0&&!S.ok?78:0;
+  let reserve=S.step===3?Math.max(190,nameEl.offsetHeight):0;
+  stage.style.minHeight='';
+  if(S.ring){
+    /* místo pro vyplněný název (i když ještě není vidět), aby se nákres v posledním kroku vešel bez posouvání */
+    const sh=nameEl.classList.contains('show'),cur=S.nm;S.nm=filledNm();nameEl.classList.add('show');renderName();
+    const fH=Math.max(190,nameEl.offsetHeight);S.nm=cur;renderName();nameEl.classList.toggle('show',sh);
+    if(S.step===3)reserve=Math.max(reserve,fH);
+    return layoutRing(top,footH,extra,reserve,fH);
+  }
   const xs=M.atoms.map(a=>a.x),ys=M.atoms.map(a=>a.y);
   const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
   const cols=maxX-minX+1,rows=maxY-minY+1;
-  const extra=S.step===0&&!S.ok?78:0;
   const wFit=(stage.clientWidth-12)/(cols+.8);
-  const top=stage.getBoundingClientRect().top+scrollY,footH=$('footer').offsetHeight;
-  const reserve=S.step===3?Math.max(190,$('#nameArea').offsetHeight):0;
   const ky=S.step===3?.72:.82,hFit=(innerHeight-top-footH-reserve-extra-30)/(rows*ky+1);
   SC=Math.max(40,Math.min(104,wFit,hFit));
   const SY=SC*ky;
@@ -544,6 +552,42 @@ function layout(){
   POS={};M.atoms.forEach(a=>POS[a.id]={x:(a.x-minX)*SC+ox,y:(a.y-minY)*SY+oy});
   MOLB=(rows-1)*SY+oy+FS*.6;
   board.style.width=(cols-1)*SC+ox*2+SC*.2+'px';board.style.height=MOLB+FS*1.5+extra+'px';
+}
+/* cyklus: stejné měřítko vodorovně i svisle; hrana kruhu se natáhne na f a vazby větví podle směru, aby se na ně vešly popisky.
+   rot = otočení o celé dílky kruhu (případně zrcadlově), takže kruh vypadá stejně, jen větve míří tam, kde je víc místa */
+function ringGeo(f,fs,rot){
+  const R=S.ring,k=R.length,c={x:0,y:0},A=M.atoms;R.forEach(id=>{c.x+=A[id].x/k;c.y+=A[id].y/k});
+  const th=2*Math.PI*(rot>>1)/k,co=Math.cos(th),si=Math.sin(th),mi=rot&1?-1:1;
+  const o=A.map(a=>{const x=(a.x-c.x)*mi,y=a.y-c.y;return {x:x*co-y*si,y:x*si+y*co}});
+  /* vazba větve musí pojmout popisky: vodorovná víc (popisky vedle sebe), svislá míň */
+  const P={},q=[];R.forEach(id=>{P[id]={id,x:o[id].x*f,y:o[id].y*f};q.push(id)});
+  while(q.length){const x=q.shift();for(const e of ADJ[x])if(!P[e.to]){const dx=o[e.to].x-o[x].x,dy=o[e.to].y-o[x].y,L=Math.max(1,(1.6+1.2*Math.abs(dx)/Math.hypot(dx,dy))*fs);
+    P[e.to]={id:e.to,x:P[x].x+dx*L,y:P[x].y+dy*L};q.push(e.to)}}
+  return A.map(a=>P[a.id]);
+}
+function ringFit(rot,availW,availH){
+  const k=S.ring.length,edge=k===3?3.6:k===4?3.2:3;
+  for(let sc=104;;sc--){
+    const fs=Math.max(sc<24?12:sc<28?13:15,Math.min(34,sc*.37)),g=ringGeo(Math.max(1,edge*fs/sc),fs/sc,rot);
+    const xs=g.map(a=>a.x),ys=g.map(a=>a.y),minX=Math.min(...xs),minY=Math.min(...ys);
+    const cols=Math.max(...xs)-minX+1,rows=Math.max(...ys)-minY+1;
+    if(sc<=18||((cols+.8)*sc<=availW&&(rows-1)*sc+fs*2.8<=availH))return {sc,fs,g,minX,minY,cols,rows};
+  }
+}
+function layoutRing(top,footH,extra,reserve,fH){
+  const availW=stage.clientWidth-12;
+  if(S.rot==null){
+    /* natočení se vybere jednou na příklad, podle nejtěsnějšího kroku (název pod nákresem) */
+    const h4=innerHeight-top-footH-Math.max(reserve,fH)-26;let bs=0;S.rot=0;
+    for(let r=0;r<2*S.ring.length;r++){const sc=ringFit(r,availW,h4).sc;if(sc>bs+.5){bs=sc;S.rot=r}}
+  }
+  const L=ringFit(S.rot,availW,innerHeight-top-footH-reserve-extra-(S.step===3?12:0)-14);
+  if(S.step===3)stage.style.minHeight='0';
+  SC=L.sc;FS=L.fs;
+  const ox=SC*.8,oy=FS*1.3;
+  POS={};L.g.forEach(a=>POS[a.id]={x:(a.x-L.minX)*SC+ox,y:(a.y-L.minY)*SC+oy});
+  MOLB=(L.rows-1)*SC+oy+FS*.6;
+  board.style.width=(L.cols-1)*SC+ox*2+SC*.2+'px';board.style.height=MOLB+FS*.9+extra+'px';
 }
 function boxOf(id){
   const br=board.getBoundingClientRect(),a=ATOM[id],r=a.getBoundingClientRect(),s=a.querySelector('.slot').getBoundingClientRect();
@@ -557,6 +601,13 @@ function updateBonds(){
   LINES.forEach(L=>{const {a,b}=L.b,p=POS[a],q=POS[b],dx=q.x-p.x,dy=q.y-p.y,len=Math.hypot(dx,dy),ux=dx/len,uy=dy/len,nx=-uy,ny=ux;
     const s=trim(a,ux,uy,BX[a]),e=trim(b,-ux,-uy,BX[b]);
     const ax=p.x+ux*s,ay=p.y+uy*s,bx=q.x-ux*e,by=q.y-uy*e;L.len=Math.max(1,Math.hypot(bx-ax,by-ay));L.seg={ax,ay,bx,by};
+    if(L.rd){
+      /* dvojná vazba v kruhu: hlavní čára na hraně, druhá kratší uvnitř kruhu */
+      const c=ringCenter(),sg=(c.x-(p.x+q.x)/2)*nx+(c.y-(p.y+q.y)/2)*ny>0?1:-1,d=Math.max(5,Math.min(6,FS*.2))*sg,cut=L.len*.15;
+      const set=(l,x1,y1,x2,y2)=>{l.setAttribute('x1',x1);l.setAttribute('y1',y1);l.setAttribute('x2',x2);l.setAttribute('y2',y2)};
+      set(L.ls[0],ax,ay,bx,by);L.lens=[L.len,Math.max(1,L.len-2*cut)];
+      set(L.ls[1],ax+ux*cut+nx*d,ay+uy*cut+ny*d,bx-ux*cut+nx*d,by-uy*cut+ny*d);return}
+    L.lens=L.ls.map(()=>L.len);
     L.ls.forEach((l,i)=>{const o=L.offs[i];l.setAttribute('x1',ax+nx*o);l.setAttribute('y1',ay+ny*o);l.setAttribute('x2',bx+nx*o);l.setAttribute('y2',by+ny*o)})});
 }
 function build(animate){
@@ -565,11 +616,15 @@ function build(animate){
   M.atoms.forEach(a=>{const e=document.createElement('button');e.className='atom'+(a.t?' het':'');e.dataset.id=a.id;e.setAttribute('aria-label',a.t||'uhlík');
     e.style.left=POS[a.id].x+'px';e.style.top=POS[a.id].y+'px';e.style.fontSize=FS+'px';
     e.innerHTML=`<span class="c">${a.t||'C'}</span><span class="slot"></span>`;atomL.appendChild(e);ATOM[a.id]=e});
-  SIDE={};M.atoms.forEach(a=>{if(a.t)return;let r=0,l=0;for(const e of ADJ[a.id]){const q=POS[e.to],p=POS[a.id],dx=q.x-p.x,dy=q.y-p.y;if(Math.abs(dy)<=Math.abs(dx)*1.2){if(dx>0)r++;else l++}}SIDE[a.id]=r>l?'L':'R'});
+  const rc=S.ring?ringCenter():null;
+  SIDE={};M.atoms.forEach(a=>{if(a.t)return;let r=0,l=0;for(const e of ADJ[a.id]){const q=POS[e.to],p=POS[a.id],dx=q.x-p.x,dy=q.y-p.y;if(Math.abs(dy)<=Math.abs(dx)*1.2){if(dx>0)r++;else l++}}SIDE[a.id]=r>l?'L':'R';
+    /* v kruhu vodíky ven, pokud tam nevede vazba */
+    if(rc&&S.ring.includes(a.id)){const dx=POS[a.id].x-rc.x;if(Math.abs(dx)>SC*.2){const o=dx<0?'L':'R';if(!(o==='L'?l:r))SIDE[a.id]=o}}});
   M.atoms.forEach(a=>paintSlot(a.id));
   const NS='http://www.w3.org/2000/svg';
-  M.bonds.forEach(b=>{const offs=b.o===1?[0]:b.o===2?[-3,3]:[-4.6,0,4.6];
-    LINES.push({b,offs,len:1,ls:offs.map(()=>{const l=document.createElementNS(NS,'line');l.setAttribute('class','bond');bondG.appendChild(l);return l})})});
+  const inR=new Set(S.ring||[]);
+  M.bonds.forEach(b=>{const rd=b.o===2&&inR.has(b.a)&&inR.has(b.b),offs=b.o===1?[0]:rd?[0,1]:b.o===2?[-3,3]:[-4.6,0,4.6];
+    LINES.push({b,offs,rd,len:1,lens:offs.map(()=>1),ls:offs.map(()=>{const l=document.createElementNS(NS,'line');l.setAttribute('class','bond');bondG.appendChild(l);return l})})});
   updateBonds();paintHL();paintNums(false);
   if(animate)drawIn();
   placePop();
@@ -581,7 +636,7 @@ function drawIn(){
   const maxD=Math.max(1,...Object.values(dep)),step=Math.min(300,1300/maxD),dur=Math.max(180,step*1.05);
   edges.forEach(([x,y])=>{const li=LINES.find(L=>(L.b.a===x&&L.b.b===y)||(L.b.b===x&&L.b.a===y)),d=dep[x]*step+80;
     const fwd=li.b.a===x;
-    li.ls.forEach(l=>{l.style.strokeDasharray=li.len;const an=l.animate([{strokeDashoffset:fwd?li.len:-li.len},{strokeDashoffset:0}],{duration:dur,delay:d,easing:'cubic-bezier(.55,0,.3,1)',fill:'backwards'});an.onfinish=()=>l.style.strokeDasharray=''})});
+    li.ls.forEach((l,i)=>{const n=li.lens[i]||li.len;l.style.strokeDasharray=n;const an=l.animate([{strokeDashoffset:fwd?n:-n},{strokeDashoffset:0}],{duration:dur,delay:d,easing:'cubic-bezier(.55,0,.3,1)',fill:'backwards'});an.onfinish=()=>l.style.strokeDasharray=''})});
   M.atoms.forEach(a=>{const e=ATOM[a.id],d=dep[a.id]?dep[a.id]*step+80+dur*.55:0;
     e.animate([{opacity:0},{opacity:1}],{duration:200,delay:d,easing:'ease-out',fill:'backwards'});
     e.querySelector('.slot').animate([{opacity:0},{opacity:1}],{duration:240,delay:d+200,fill:'backwards'})});
@@ -615,9 +670,18 @@ function chainShapes(P,pad,col){
     l-=pad;r+=pad;t-=pad;b+=pad;const rx=Math.min(FS*.5,(b-t)/2,(r-l)/2);
     return `<rect x="${l}" y="${t}" width="${r-l}" height="${b-t}" rx="${rx}" style="fill:${col}"/>`}).join('');
 }
+/* kruh je konvexní: výplň = zaoblený konvexní obal popisků všech uhlíků kruhu, bez zubů mezi popisky */
 function ringShapes(P,pad,col){
-  const w=FS*1.15+pad*2,pts=P.map(id=>POS[id].x+','+POS[id].y).join(' ');
-  return `<polygon points="${pts}" style="fill:${col};stroke:${col};stroke-width:${w};stroke-linejoin:round"/>`+P.map(id=>{const x=boxOf(id);return `<rect x="${x.l-pad}" y="${x.t-pad}" width="${x.r-x.l+pad*2}" height="${x.b-x.t+pad*2}" rx="${Math.min(FS*.45,(x.b-x.t)/2+pad)}" style="fill:${col}"/>`}).join('');
+  const rr=FS*.32,pts=[],c=ringCenter(),ev=P.length%2===0;
+  /* obal se zrcadlí podle os kruhu (svislá, u sudých i vodorovná), takže je souměrný jako kruh */
+  P.forEach(id=>{const x=boxOf(id),l=x.l-pad+rr,r=Math.max(l,x.r+pad-rr),t=x.t-pad+rr,b=Math.max(t,x.b+pad-rr);
+    for(const [X,Y] of [[l,t],[r,t],[r,b],[l,b]]){pts.push([X,Y],[2*c.x-X,Y]);if(ev)pts.push([X,2*c.y-Y],[2*c.x-X,2*c.y-Y])}});
+  pts.sort((u,v)=>u[0]-v[0]||u[1]-v[1]);
+  const cr=(o,u,v)=>(u[0]-o[0])*(v[1]-o[1])-(u[1]-o[1])*(v[0]-o[0]),lo=[],up=[];
+  for(const q of pts){while(lo.length>1&&cr(lo[lo.length-2],lo[lo.length-1],q)<=0)lo.pop();lo.push(q)}
+  for(const q of [...pts].reverse()){while(up.length>1&&cr(up[up.length-2],up[up.length-1],q)<=0)up.pop();up.push(q)}
+  const hull=[...lo.slice(0,-1),...up.slice(0,-1)];
+  return `<polygon points="${hull.map(q=>q.join(',')).join(' ')}" style="fill:${col};stroke:${col};stroke-width:${rr*2};stroke-linejoin:round"/>`;
 }
 function ringCenter(){const R=S.ring;return {x:R.reduce((s,id)=>s+POS[id].x,0)/R.length,y:R.reduce((s,id)=>s+POS[id].y,0)/R.length}}
 function paintHL(){
@@ -643,13 +707,34 @@ function ringCenterOf(){const R=S.ring;return R?{x:R.reduce((s,id)=>s+POS[id].x,
 function placeNum(id,txt,G,placed){
   const p=POS[id],fs=Math.max(13,FS*.55),w=fs*.6*String(txt).length+3,h=fs*.95;
   let pref={x:0,y:-1};
-  if(S.ring&&S.ring.includes(id)){const c=ringCenterOf(),dx=c.x-p.x,dy=c.y-p.y,L=Math.hypot(dx,dy)||1;pref={x:dx/L,y:dy/L}}
+  if(S.ring&&S.ring.includes(id)){const r=placeRingNum(id,fs,w,h,G,placed);if(r){placed.push(r.box);return {x:r.x,y:r.y,fs}}
+    const c=ringCenterOf(),dx=c.x-p.x,dy=c.y-p.y,L=Math.hypot(dx,dy)||1;pref={x:dx/L,y:dy/L}}
   let best=null,bs=-1e9;
   for(const r of [FS*.9,FS*1.12,FS*1.4])for(let k=0;k<24;k++){
     const a=k*Math.PI/12,ux=Math.cos(a),uy=Math.sin(a),x=p.x+ux*r,y=p.y+uy*r,box={l:x-w/2,r:x+w/2,t:y-h/2,b:y+h/2};
     const c=clearance(box,G,placed),sc=Math.min(c,fs*.7)*10+(ux*pref.x+uy*pref.y)*fs*1.5-(r-FS*.9)*2;
     if(sc>bs){bs=sc;best={x,y,box}}}
   placed.push(best.box);return {x:best.x,y:best.y,fs};
+}
+/* číslo v kruhu: po paprsku ke středu (nebo ven, když uvnitř není místo); musí být zřetelně blíž svému uhlíku než kterémukoli jinému atomu */
+function placeRingNum(id,fs,w,h,G,placed){
+  const p=POS[id],c=ringCenterOf(),a0=Math.atan2(c.y-p.y,c.x-p.x),oth=M.atoms.filter(a=>a.id!==id).map(a=>POS[a.id]);
+  let best=null,bs=-1e9;
+  for(const strict of [1,0]){if(best)break;
+  for(const out of [0,1])for(const da of out?[0,15,-15,30,-30,45,-45,60,-60,75,-75,90,-90,105,-105,120,-120]:[0,8,-8,16,-16,24,-24]){
+    const a=a0+(out?Math.PI:0)+da*Math.PI/180,ux=Math.cos(a),uy=Math.sin(a);
+    for(let r=FS*.5;r<=FS*(strict?1.9:2.6);r+=FS*.06){
+      const x=p.x+ux*r,y=p.y+uy*r,box={l:x-w/2,r:x+w/2,t:y-h/2,b:y+h/2};
+      let dm=1e9;for(const q of oth)dm=Math.min(dm,Math.hypot(x-q.x,y-q.y));
+      const ratio=r/dm;if(ratio>(strict?.6:.68))continue;
+      const cl=clearance(box,G,placed);if(cl<(strict?2:.5))continue;
+      if(strict){let bo=1e9;for(const k in G.BX)if(+k!==id)bo=Math.min(bo,rectDist(box,G.BX[k]));
+        if(rectDist(box,G.BX[id])+3>(bo+3)*.6)continue}
+      const sc=(out?0:1000)+Math.min(cl,fs*.35)*4-Math.abs(da)*.35-r/FS*8-ratio*12;
+      if(sc>bs){bs=sc;best={x,y,box}}
+    }
+  }}
+  return best;
 }
 function numEl(id,n,bad,faint,G,placed){const p=placeNum(id,n,G,placed);return `<span class="num${bad?' bad':''}" style="left:${p.x}px;top:${p.y}px;font-size:${p.fs}px${faint?';opacity:.45':''}">${n}</span>`}
 function arrowEl(end,nb,G,placed){
@@ -737,7 +822,7 @@ function newProblem(){
   closePick();
   const g=generate(S.level,OPT)||generate(1,OPT)||generate(1);M=g.m;SOL=g.sol;ADJ=SOL.adj;
   ORDER=M.atoms.filter(a=>!a.t).sort((a,b)=>a.y-b.y||a.x-b.x).map(a=>a.id);
-  Object.assign(S,{step:0,ok:false,final:false,h:{},sel:ORDER[0],bad:new Set(),path:[],dir:null,lock:false,nm:null,badF:new Set(),helped:false,ring:SOL.ring||null,arom:!!SOL.arom,r1:null});
+  Object.assign(S,{step:0,ok:false,final:false,h:{},sel:ORDER[0],bad:new Set(),path:[],dir:null,lock:false,nm:null,badF:new Set(),helped:false,ring:SOL.ring||null,arom:!!SOL.arom,r1:null,rot:null});
   if(!OPT.hyd){M.atoms.forEach(a=>{if(!a.t)S.h[a.id]=4-val(ADJ,a.id)});S.sel=null;S.step=1}
   hush();paintHead();build(true);paintFoot();
 }
@@ -863,7 +948,7 @@ function fieldBtn(key,val,ph,dis){const bad=S.badF.has(key)?' bad':'',open=PK&&P
   return `<button class="f${val?'':' empty'}${bad}${open}" data-f="${key}"${dis?' disabled':''}>${val?esc(val):ph}</button>`}
 function renderName(){
   const n=S.nm;if(!n){nameEl.innerHTML='';return}
-  const hasG=EFF().ol||EFF().onal||EFF().acid,bz=n.stem==='benzen';
+  const hasG=!S.ring&&(EFF().ol||EFF().onal||EFF().acid),bz=n.stem==='benzen';
   let h=`<div class="nrow"><small>${EFF().halo?'větve a předpony':'větve'}</small>`;
   n.subs.forEach((g,i)=>{h+=`<span class="grp">${fieldBtn('s'+i+'.locs',g.locs.join(','),'čísla')}<span class="dash">-</span>${fieldBtn('s'+i+'.mult',g.mult,'di/tri?')}${fieldBtn('s'+i+'.alk',g.alk,'větev')}</span>`});
   h+=`<button class="plus" data-add="s">+ větev</button></div><div class="nrow"><small>${S.ring?'základ':'hlavní řetězec'}</small>`;
@@ -937,6 +1022,7 @@ function target(){
   }
   return T;
 }
+function filledNm(){const T=target();return {subs:T.subs.map(g=>({...g,locs:[...g.locs]})),stem:T.stem,cyc:/^cyklo/.test(T.stem),bonds:T.bonds.length?T.bonds.map(b=>({...b,locs:[...b.locs]})):[{locs:[],mult:'',end:''}],grp:{...T.grp,locs:[...T.grp.locs]}}}
 function checkName(){
   closePick();
   const str=nmString();
@@ -986,7 +1072,7 @@ function help(){
   if(S.step===1){S.path=[...SOL.best.P];S.ok=true;paintHL();solved('Tudy vede hlavní řetězec.',`Má ${S.path.length} uhlíků.`);return}
   if(S.step===2&&S.ring){numTok++;S.lock=false;S.dir=null;S.r1=SOL.best.P[0];ringNumTap(SOL.best.P[1],true);return}
   if(S.step===2){numTok++;S.lock=false;S.dir=null;const d=bestDir(ADJ,S.path).P;numberFrom(d[0],true);return}
-  if(S.step===3){closePick();const T=target();S.nm={subs:T.subs.map(g=>({...g,locs:[...g.locs]})),stem:T.stem,cyc:/^cyklo/.test(T.stem),bonds:T.bonds.length?T.bonds.map(b=>({...b,locs:[...b.locs]})):[{locs:[],mult:'',end:''}],grp:{...T.grp,locs:[...T.grp.locs]}};finish()}
+  if(S.step===3){closePick();S.nm=filledNm();finish()}
 }
 
 /* ---------- události ---------- */
